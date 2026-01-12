@@ -18,14 +18,14 @@ A workspace manager for [Claude Code](https://claude.ai/code) that supercharges 
 
 ### Installation
 
+#### Clone and install
 ```bash
-# Clone and install
 git clone https://github.com/malipetek/claude-workspace.git
 cd claude-workspace
 ./install.sh
 ```
+#### Or one-liner
 ```bash
-# Or one-liner
 curl -fsSL https://raw.githubusercontent.com/malipetek/claude-workspace/refs/heads/main/install.sh | bash
 ```
 
