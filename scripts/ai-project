@@ -25,7 +25,7 @@
 
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 REGISTRY="$HOME/.claude-workspace/registry.json"
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 show_help() {
     cat << 'EOF'
@@ -331,16 +331,6 @@ fi
 # Get all project names
 PROJECT_NAMES=($(jq -r '.projects | keys[]' "$REGISTRY" 2>/dev/null))
 
-if [ ${#PROJECT_NAMES[@]} -eq 0 ] && [ -z "$1" ]; then
-    echo ""
-    echo "No projects registered yet."
-    echo ""
-    echo "Run 'claude-workspace setup' to get started, or"
-    echo "Run 'claude-workspace add /path/to/project' to add a project."
-    echo ""
-    exit 0
-fi
-
 # If project name provided as argument
 if [ -n "$1" ]; then
     PROJECT_NAME="$1"
@@ -370,9 +360,58 @@ if [ -n "$1" ]; then
     exit 0
 fi
 
+# Build unified menu items
+# Format: "type:name:extra_info"
+MENU_ITEMS=()
+MENU_TYPES=()
+
+# Add projects first
+for name in "${PROJECT_NAMES[@]}"; do
+    MENU_ITEMS+=("$name")
+    MENU_TYPES+=("project")
+done
+
+# Add separator if we have projects
+if [ ${#PROJECT_NAMES[@]} -gt 0 ]; then
+    MENU_ITEMS+=("---")
+    MENU_TYPES+=("separator")
+fi
+
+# Add commands
+MENU_ITEMS+=("Setup Wizard")
+MENU_TYPES+=("setup")
+
+MENU_ITEMS+=("Settings")
+MENU_TYPES+=("settings")
+
+MENU_ITEMS+=("Add Project")
+MENU_TYPES+=("add")
+
+MENU_ITEMS+=("List Projects")
+MENU_TYPES+=("list")
+
+MENU_ITEMS+=("Update")
+MENU_TYPES+=("update")
+
+MENU_ITEMS+=("Help")
+MENU_TYPES+=("help")
+
 # Interactive mode - arrow key selection
 selected=0
-total=${#PROJECT_NAMES[@]}
+total=${#MENU_ITEMS[@]}
+
+# Skip separator if it's selected
+skip_separator() {
+    while [ "${MENU_TYPES[$selected]}" = "separator" ]; do
+        if [ "$1" = "down" ]; then
+            ((selected++))
+            [ $selected -ge $total ] && selected=0
+        else
+            ((selected--))
+            [ $selected -lt 0 ] && selected=$((total - 1))
+        fi
+    done
+}
 
 # Hide cursor
 tput civis
@@ -388,56 +427,106 @@ trap cleanup EXIT
 draw_menu() {
     clear
     echo "╔══════════════════════════════════════════════════════════════════════════════╗"
-    echo "║  CLAUDE WORKSPACE                                                            ║"
+    echo "║  CLAUDE WORKSPACE                                                v$VERSION ║"
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo ""
-    echo "  ↑/↓: Navigate   Enter: Launch   w: Workspace   s: Simple   q: Quit"
+    echo "  ↑/↓: Navigate   Enter: Select   w: Workspace mode   s: Simple mode   q: Quit"
     echo ""
 
-    for i in "${!PROJECT_NAMES[@]}"; do
-        name="${PROJECT_NAMES[$i]}"
-        path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
-        desc=$(jq -r ".projects[\"$name\"].description // \"\"" "$REGISTRY")
+    local in_projects=true
+    local showed_projects_header=false
 
-        # Check for workspace config
-        local workspace_indicator=""
-        local process_count=0
-        if [ -f "$path/.claude-workspace.json" ]; then
-            process_count=$(jq '.processes | length' "$path/.claude-workspace.json" 2>/dev/null || echo 0)
-            workspace_indicator=" [⊞ $process_count processes]"
+    for i in "${!MENU_ITEMS[@]}"; do
+        # Show PROJECTS header before first project
+        if [ "$in_projects" = true ] && [ "${MENU_TYPES[$i]}" = "project" ] && [ "$showed_projects_header" = false ]; then
+            tput setaf 8
+            echo "  PROJECTS"
+            tput sgr0
+            echo ""
+            showed_projects_header=true
+        fi
+        local item="${MENU_ITEMS[$i]}"
+        local type="${MENU_TYPES[$i]}"
+
+        # Handle separator
+        if [ "$type" = "separator" ]; then
+            echo ""
+            tput setaf 8
+            echo "  ─────────────────────────────────────────────────────────────────────────────"
+            echo "  COMMANDS"
+            tput sgr0
+            echo ""
+            in_projects=false
+            continue
         fi
 
-        if [ $i -eq $selected ]; then
-            tput setaf 0  # Black text
-            tput setab 2  # Green background
-            echo " ▶ $name$workspace_indicator"
-            tput sgr0
-            echo "   Path: $path"
-            if [ -n "$desc" ]; then
-                echo "   Description: $desc"
+        # Handle projects
+        if [ "$type" = "project" ]; then
+            local path=$(jq -r ".projects[\"$item\"].path" "$REGISTRY")
+            local desc=$(jq -r ".projects[\"$item\"].description // \"\"" "$REGISTRY")
+
+            local workspace_indicator=""
+            local process_count=0
+            if [ -f "$path/.claude-workspace.json" ]; then
+                process_count=$(jq '.processes | length' "$path/.claude-workspace.json" 2>/dev/null || echo 0)
+                workspace_indicator=" [⊞ $process_count]"
             fi
-            if [ $process_count -gt 0 ]; then
-                tput setaf 6  # Cyan
-                echo "   Workspace: Ghostty split panes with $process_count dev processes"
+
+            if [ $i -eq $selected ]; then
+                tput setaf 0
+                tput setab 2
+                echo " ▶ $item$workspace_indicator"
                 tput sgr0
-            fi
-        else
-            if [ -n "$workspace_indicator" ]; then
-                tput setaf 6  # Cyan for workspace indicator
-                echo "   $name$workspace_indicator"
+                tput setaf 8
+                echo "   $path"
+                [ -n "$desc" ] && echo "   $desc"
                 tput sgr0
             else
-                echo "   $name"
+                if [ -n "$workspace_indicator" ]; then
+                    tput setaf 6
+                    echo "   $item$workspace_indicator"
+                    tput sgr0
+                else
+                    echo "   $item"
+                fi
             fi
-            tput setaf 8  # Gray text
-            echo "   $path"
-            tput sgr0
+
+        # Handle commands
+        else
+            local icon=""
+            local description=""
+            case "$type" in
+                setup)    icon="⚙️ "; description="Configure projects and workspaces" ;;
+                settings) icon="🎛️ "; description="AI tools and delegation settings" ;;
+                add)      icon="➕"; description="Add a new project to registry" ;;
+                list)     icon="📋"; description="Show all registered projects" ;;
+                update)   icon="🔄"; description="Update to latest version" ;;
+                help)     icon="❓"; description="Show help and documentation" ;;
+            esac
+
+            if [ $i -eq $selected ]; then
+                tput setaf 0
+                tput setab 2
+                echo " ▶ $icon $item"
+                tput sgr0
+                tput setaf 8
+                echo "   $description"
+                tput sgr0
+            else
+                echo "   $icon $item"
+            fi
         fi
-        echo ""
     done
+
+    # Show project count
+    echo ""
+    tput setaf 8
+    echo "  ${#PROJECT_NAMES[@]} project(s) registered"
+    tput sgr0
 }
 
 # Initial draw
+skip_separator "down"
 draw_menu
 
 # Read input
@@ -446,16 +535,20 @@ while true; do
 
     case "$key" in
         q|Q)
-            echo "Exiting..."
+            echo ""
             exit 0
             ;;
-        w|W)  # Force workspace mode
-            FORCE_MODE="workspace"
-            break
+        w|W)  # Force workspace mode (only for projects)
+            if [ "${MENU_TYPES[$selected]}" = "project" ]; then
+                FORCE_MODE="workspace"
+                break
+            fi
             ;;
-        s|S)  # Force simple mode
-            FORCE_MODE="simple"
-            break
+        s|S)  # Force simple mode (only for projects)
+            if [ "${MENU_TYPES[$selected]}" = "project" ]; then
+                FORCE_MODE="simple"
+                break
+            fi
             ;;
         "")  # Enter key
             break
@@ -465,15 +558,13 @@ while true; do
             case "$key" in
                 '[A')  # Up arrow
                     ((selected--))
-                    if [ $selected -lt 0 ]; then
-                        selected=$((total - 1))
-                    fi
+                    [ $selected -lt 0 ] && selected=$((total - 1))
+                    skip_separator "up"
                     ;;
                 '[B')  # Down arrow
                     ((selected++))
-                    if [ $selected -ge $total ]; then
-                        selected=0
-                    fi
+                    [ $selected -ge $total ] && selected=0
+                    skip_separator "down"
                     ;;
             esac
             draw_menu
@@ -481,14 +572,69 @@ while true; do
     esac
 done
 
-# Get selected project
-PROJECT_NAME="${PROJECT_NAMES[$selected]}"
-PROJECT_PATH=$(jq -r ".projects[\"$PROJECT_NAME\"].path" "$REGISTRY")
+# Handle selection based on type
+SELECTED_TYPE="${MENU_TYPES[$selected]}"
+SELECTED_ITEM="${MENU_ITEMS[$selected]}"
 
-# Check if directory exists
-if [ ! -d "$PROJECT_PATH" ]; then
-    echo "Error: Project directory not found: $PROJECT_PATH"
-    exit 1
-fi
+case "$SELECTED_TYPE" in
+    project)
+        PROJECT_PATH=$(jq -r ".projects[\"$SELECTED_ITEM\"].path" "$REGISTRY")
 
-launch_project "$PROJECT_PATH" "$FORCE_MODE"
+        if [ ! -d "$PROJECT_PATH" ]; then
+            echo "Error: Project directory not found: $PROJECT_PATH"
+            exit 1
+        fi
+
+        launch_project "$PROJECT_PATH" "$FORCE_MODE"
+        ;;
+    setup)
+        exec "$SCRIPT_DIR/setup.sh"
+        ;;
+    settings)
+        exec "$SCRIPT_DIR/settings.sh"
+        ;;
+    add)
+        echo ""
+        read -p "Project path: " project_path
+        project_path="${project_path/#\~/$HOME}"
+        if [ -d "$project_path" ]; then
+            add_project "$project_path"
+        else
+            echo "Error: Directory not found"
+            exit 1
+        fi
+        ;;
+    list)
+        list_projects
+        ;;
+    update)
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+        echo "║  Updating Claude Workspace...                                                ║"
+        echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+
+        if [ -d "$HOME/.claude-workspace/.git" ]; then
+            echo "Updating via git..."
+            cd "$HOME/.claude-workspace"
+            git fetch origin
+            LOCAL=$(git rev-parse HEAD)
+            REMOTE=$(git rev-parse origin/main)
+            if [ "$LOCAL" = "$REMOTE" ]; then
+                echo "✓ Already up to date (v$VERSION)"
+            else
+                git pull origin main
+                echo ""
+                echo "✓ Updated successfully!"
+                NEW_VERSION=$(grep "^VERSION=" "$SCRIPT_DIR/ai-project" | cut -d'"' -f2)
+                echo "  New version: $NEW_VERSION"
+            fi
+        else
+            echo "Updating via install script..."
+            curl -fsSL https://raw.githubusercontent.com/malipetek/claude-workspace/main/install.sh | bash
+        fi
+        ;;
+    help)
+        show_help
+        ;;
+esac
