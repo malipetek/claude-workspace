@@ -112,17 +112,19 @@ fi
 # Create installation directory
 echo ""
 echo -e "${BLUE}Installing to $INSTALL_DIR...${NC}"
-mkdir -p "$INSTALL_DIR"/{scripts,templates,logs,dev-logs,status,dev-markers}
+mkdir -p "$INSTALL_DIR"/{scripts,scripts/lib,templates,logs,dev-logs,status,dev-markers}
 
 # Copy scripts
 cp "$SOURCE_DIR"/scripts/*.sh "$INSTALL_DIR/scripts/" 2>/dev/null || true
 cp "$SOURCE_DIR"/scripts/*.applescript "$INSTALL_DIR/scripts/" 2>/dev/null || true
 cp "$SOURCE_DIR"/scripts/ai-project "$INSTALL_DIR/scripts/" 2>/dev/null || true
+cp "$SOURCE_DIR"/scripts/lib/*.sh "$INSTALL_DIR/scripts/lib/" 2>/dev/null || true
 cp "$SOURCE_DIR"/templates/*.json "$INSTALL_DIR/templates/" 2>/dev/null || true
 cp "$SOURCE_DIR"/aliases.sh "$INSTALL_DIR/" 2>/dev/null || true
 
 # Make scripts executable
 chmod +x "$INSTALL_DIR"/scripts/*
+chmod +x "$INSTALL_DIR"/scripts/lib/* 2>/dev/null || true
 
 # Create registry.json if it doesn't exist
 if [ ! -f "$INSTALL_DIR/registry.json" ]; then
