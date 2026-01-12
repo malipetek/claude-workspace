@@ -25,6 +25,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 # Ensure jq is available
@@ -54,7 +55,6 @@ detect_npm_scripts() {
     local pkg_file="$project_path/package.json"
 
     if [ -f "$pkg_file" ]; then
-        # Look for common dev scripts
         local scripts=$(jq -r '.scripts | keys[]' "$pkg_file" 2>/dev/null | grep -E "^(dev|start|watch|serve)$" | head -5)
         echo "$scripts"
     fi
@@ -73,7 +73,6 @@ detect_project_type() {
     if [ -d "$project_path/packages" ] || [ -d "$project_path/apps" ]; then
         echo -e "  ${GREEN}✓${NC} Detected: Monorepo structure"
 
-        # Find subdirectories with package.json
         for dir in "$project_path"/{packages,apps}/*; do
             if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
                 local name=$(basename "$dir")
@@ -124,7 +123,6 @@ detect_project_type() {
         echo -e "  ${GREEN}✓${NC} Detected: Docker Compose"
     fi
 
-    # Return suggestions
     printf '%s\n' "${suggestions[@]}"
 }
 
@@ -138,7 +136,6 @@ create_workspace_config() {
     echo -e "${BLUE}Path:${NC} $project_path"
     echo ""
 
-    # Detect project type
     local suggestions=$(detect_project_type "$project_path")
 
     echo ""
@@ -152,7 +149,6 @@ create_workspace_config() {
         fi
     fi
 
-    # Start building config
     local processes=()
 
     if [ -n "$suggestions" ]; then
@@ -185,7 +181,6 @@ create_workspace_config() {
         fi
     fi
 
-    # Allow adding custom processes
     echo ""
     echo -e "${BLUE}Add custom dev processes${NC} (leave empty to finish):"
     echo ""
@@ -205,7 +200,6 @@ create_workspace_config() {
         echo ""
     done
 
-    # Build JSON
     local processes_json=$(printf '%s\n' "${processes[@]}" | paste -sd ',' -)
 
     cat > "$config_file" << EOF
@@ -216,7 +210,6 @@ create_workspace_config() {
 }
 EOF
 
-    # Validate and format JSON
     if command -v jq &> /dev/null; then
         local temp=$(mktemp)
         jq '.' "$config_file" > "$temp" 2>/dev/null && mv "$temp" "$config_file"
@@ -239,12 +232,139 @@ add_project_to_registry() {
 
     read -p "Description (optional): " description
 
-    # Add to registry
     local temp=$(mktemp)
     jq ".projects[\"$project_name\"] = {\"path\": \"$project_path\", \"description\": \"$description\", \"status\": \"active\"}" "$REGISTRY" > "$temp"
     mv "$temp" "$REGISTRY"
 
     echo -e "${GREEN}✓${NC} Added '$project_name' to registry"
+}
+
+# Interactive multi-select function
+# Usage: interactive_select "Title" array[@] selected[@]
+# Returns selected indices in SELECTED_INDICES array
+interactive_multiselect() {
+    local title="$1"
+    shift
+    local -a items=("$@")
+    local total=${#items[@]}
+
+    # Initialize selection state (all unselected)
+    local -a selected=()
+    for ((i=0; i<total; i++)); do
+        selected[$i]=0
+    done
+
+    local current=0
+
+    # Hide cursor
+    tput civis
+
+    # Cleanup on exit
+    cleanup() {
+        tput cnorm
+        tput sgr0
+    }
+    trap cleanup EXIT
+
+    draw_multiselect() {
+        clear
+        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║${NC}  ${GREEN}$title${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${DIM}↑/↓: Navigate   Space: Toggle   Enter: Confirm   a: All   n: None   q: Cancel${NC}"
+        echo ""
+
+        for ((i=0; i<total; i++)); do
+            local item="${items[$i]}"
+            local name=$(basename "$item")
+            local checkbox="[ ]"
+            local has_workspace=""
+
+            [ -f "$item/.ai-workspace.json" ] && has_workspace=" ${CYAN}[configured]${NC}"
+
+            if [ "${selected[$i]}" -eq 1 ]; then
+                checkbox="${GREEN}[✓]${NC}"
+            fi
+
+            if [ $i -eq $current ]; then
+                echo -e "  ${BOLD}▶ $checkbox $name$has_workspace${NC}"
+                echo -e "    ${DIM}$item${NC}"
+            else
+                echo -e "    $checkbox $name$has_workspace"
+            fi
+        done
+
+        # Count selected
+        local count=0
+        for s in "${selected[@]}"; do
+            [ "$s" -eq 1 ] && ((count++))
+        done
+
+        echo ""
+        echo -e "  ${BLUE}Selected: $count / $total${NC}"
+    }
+
+    draw_multiselect
+
+    while true; do
+        read -rsn1 key
+
+        case "$key" in
+            q|Q)
+                SELECTED_INDICES=()
+                return 1
+                ;;
+            a|A)  # Select all
+                for ((i=0; i<total; i++)); do
+                    selected[$i]=1
+                done
+                draw_multiselect
+                ;;
+            n|N)  # Select none
+                for ((i=0; i<total; i++)); do
+                    selected[$i]=0
+                done
+                draw_multiselect
+                ;;
+            " ")  # Space - toggle selection
+                if [ "${selected[$current]}" -eq 1 ]; then
+                    selected[$current]=0
+                else
+                    selected[$current]=1
+                fi
+                draw_multiselect
+                ;;
+            "")  # Enter - confirm
+                break
+                ;;
+            $'\x1b')  # Escape sequence (arrow keys)
+                read -rsn2 -t 0.1 key
+                case "$key" in
+                    '[A')  # Up arrow
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total - 1))
+                        draw_multiselect
+                        ;;
+                    '[B')  # Down arrow
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        draw_multiselect
+                        ;;
+                esac
+                ;;
+        esac
+    done
+
+    # Build result array
+    SELECTED_INDICES=()
+    for ((i=0; i<total; i++)); do
+        if [ "${selected[$i]}" -eq 1 ]; then
+            SELECTED_INDICES+=($i)
+        fi
+    done
+
+    return 0
 }
 
 # Function to scan for projects
@@ -254,6 +374,7 @@ scan_for_projects() {
     show_header
     echo -e "${BLUE}Scanning for projects in:${NC} $search_dir"
     echo ""
+    echo -e "${DIM}This may take a moment...${NC}"
 
     local found_projects=()
 
@@ -266,6 +387,8 @@ scan_for_projects() {
         [[ "$dir" == *"/.git/"* ]] && continue
         [[ "$dir" == *"/dist/"* ]] && continue
         [[ "$dir" == *"/build/"* ]] && continue
+        [[ "$dir" == *"/.next/"* ]] && continue
+        [[ "$dir" == *"/vendor/"* ]] && continue
 
         local project_dir=$(dirname "$dir")
 
@@ -281,59 +404,54 @@ scan_for_projects() {
 
     if [ ${#found_projects[@]} -eq 0 ]; then
         echo -e "${YELLOW}No projects found.${NC}"
+        echo ""
+        read -p "Press Enter to continue..."
         return 1
     fi
 
-    echo -e "Found ${GREEN}${#found_projects[@]}${NC} projects:"
-    echo ""
-
-    local i=1
-    for project in "${found_projects[@]}"; do
-        local name=$(basename "$project")
-        local has_workspace=""
-        [ -f "$project/.ai-workspace.json" ] && has_workspace=" ${CYAN}[configured]${NC}"
-        echo -e "  ${CYAN}[$i]${NC} $name$has_workspace"
-        echo -e "      $project"
-        ((i++))
-    done
-
-    echo ""
-    echo -e "Enter project numbers to add (space-separated), or ${CYAN}'all'${NC}:"
-    read -r selection
-
-    if [ "$selection" = "all" ]; then
-        for project in "${found_projects[@]}"; do
+    # Use interactive multi-select
+    if interactive_multiselect "SELECT PROJECTS TO ADD" "${found_projects[@]}"; then
+        if [ ${#SELECTED_INDICES[@]} -eq 0 ]; then
             echo ""
+            echo -e "${YELLOW}No projects selected.${NC}"
+            read -p "Press Enter to continue..."
+            return 0
+        fi
+
+        # Process selected projects
+        for idx in "${SELECTED_INDICES[@]}"; do
+            local project="${found_projects[$idx]}"
+            show_header
             echo -e "${BLUE}Setting up:${NC} $(basename "$project")"
+            echo -e "${DIM}$project${NC}"
+            echo ""
+
             add_project_to_registry "$project"
 
             if [ ! -f "$project/.ai-workspace.json" ]; then
+                echo ""
                 read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
                 echo
                 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
                     create_workspace_config "$project"
                 fi
+            else
+                echo -e "${DIM}(already has .ai-workspace.json)${NC}"
             fi
-        done
-    else
-        for num in $selection; do
-            local idx=$((num - 1))
-            if [ $idx -ge 0 ] && [ $idx -lt ${#found_projects[@]} ]; then
-                local project="${found_projects[$idx]}"
-                echo ""
-                echo -e "${BLUE}Setting up:${NC} $(basename "$project")"
-                add_project_to_registry "$project"
 
-                if [ ! -f "$project/.ai-workspace.json" ]; then
-                    read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
-                    echo
-                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        create_workspace_config "$project"
-                    fi
-                fi
-            fi
+            echo ""
+            read -p "Press Enter to continue to next project..."
         done
+
+        echo ""
+        echo -e "${GREEN}✓ Added ${#SELECTED_INDICES[@]} projects${NC}"
+    else
+        echo ""
+        echo -e "${YELLOW}Cancelled.${NC}"
     fi
+
+    echo ""
+    read -p "Press Enter to continue..."
 }
 
 # Main menu
@@ -360,8 +478,6 @@ main_menu() {
                 scan_dir=${scan_dir:-~/Projects}
                 scan_dir="${scan_dir/#\~/$HOME}"
                 scan_for_projects "$scan_dir"
-                echo ""
-                read -p "Press Enter to continue..."
                 ;;
             2)
                 echo ""
@@ -446,7 +562,6 @@ if [ -n "$1" ]; then
         echo "  setup.sh --help       Show this help"
         exit 0
     elif [ -d "$1" ]; then
-        # Setup specific project
         add_project_to_registry "$1"
         create_workspace_config "$1"
         exit 0
