@@ -22,6 +22,9 @@ alias ws='~/.claude-workspace/scripts/workspace.sh'
 alias cw-cleanup='~/.claude-workspace/scripts/workspace-cleanup.sh'
 alias cw-logs='~/.claude-workspace/scripts/dev-logs.sh'
 
+# Settings
+alias cw-settings='~/.claude-workspace/scripts/settings.sh'
+
 # AI delegation (optional)
 alias delegate='~/.claude-workspace/scripts/delegate.sh'
 alias delegate-async='~/.claude-workspace/scripts/delegate-async.sh'

@@ -38,6 +38,7 @@ USAGE:
   claude-workspace                      Interactive project selector
   claude-workspace <project_name>       Open specific project
   claude-workspace setup                Run setup wizard
+  claude-workspace settings             Configure AI tools & delegation
   claude-workspace add <path>           Add project to registry
   claude-workspace list                 List registered projects
   claude-workspace update               Update to latest version
@@ -224,6 +225,9 @@ case "$1" in
     list)
         list_projects
         exit 0
+        ;;
+    settings)
+        exec "$SCRIPT_DIR/settings.sh" "${@:2}"
         ;;
     update)
         echo ""

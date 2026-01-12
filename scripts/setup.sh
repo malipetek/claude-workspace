@@ -642,7 +642,8 @@ main_menu() {
         echo -e "  ${CYAN}[2]${NC} Add a specific project"
         echo -e "  ${CYAN}[3]${NC} Configure workspace for existing project"
         echo -e "  ${CYAN}[4]${NC} View registered projects"
-        echo -e "  ${CYAN}[5]${NC} Check Ghostty permissions"
+        echo -e "  ${CYAN}[5]${NC} AI tools & delegation settings"
+        echo -e "  ${CYAN}[6]${NC} Check Ghostty permissions"
         echo -e "  ${CYAN}[q]${NC} Quit"
         echo ""
         read -p "Choice: " -n 1 -r choice
@@ -692,6 +693,9 @@ main_menu() {
                 read -p "Press Enter to continue..."
                 ;;
             5)
+                "$INSTALL_DIR/scripts/settings.sh"
+                ;;
+            6)
                 echo ""
                 echo -e "${BLUE}Testing Ghostty Accessibility permissions...${NC}"
                 echo ""
