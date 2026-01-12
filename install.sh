@@ -7,10 +7,10 @@
 #  Installs claude-workspace - a workspace manager for Claude Code
 #
 #  USAGE:
-#    curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/claude-workspace/main/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/malipetek/claude-workspace/main/install.sh | bash
 #
 #    Or clone and run:
-#    git clone https://github.com/YOUR_USERNAME/claude-workspace.git
+#    git clone https://github.com/malipetek/claude-workspace.git
 #    cd claude-workspace && ./install.sh
 #
 #══════════════════════════════════════════════════════════════════════════════
@@ -85,7 +85,7 @@ else
     echo ""
     echo -e "${BLUE}Downloading claude-workspace...${NC}"
     SOURCE_DIR=$(mktemp -d)
-    git clone --depth 1 https://github.com/YOUR_USERNAME/claude-workspace.git "$SOURCE_DIR" 2>/dev/null || {
+    git clone --depth 1 https://github.com/malipetek/claude-workspace.git "$SOURCE_DIR" 2>/dev/null || {
         echo -e "${RED}Failed to clone repository${NC}"
         exit 1
     }
