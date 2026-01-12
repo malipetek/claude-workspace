@@ -367,6 +367,183 @@ interactive_multiselect() {
     return 0
 }
 
+# Interactive folder navigator
+# Usage: interactive_folder_select "Title" [start_path]
+# Returns selected path in SELECTED_PATH variable
+interactive_folder_select() {
+    local title="$1"
+    local current_dir="${2:-$HOME}"
+
+    # Normalize path
+    current_dir="${current_dir/#\~/$HOME}"
+    [ ! -d "$current_dir" ] && current_dir="$HOME"
+
+    local current=0
+
+    # Hide cursor
+    tput civis
+
+    # Cleanup on exit
+    local cleanup_set=false
+    if [ -z "$(trap -p EXIT)" ]; then
+        cleanup() {
+            tput cnorm
+            tput sgr0
+        }
+        trap cleanup EXIT
+        cleanup_set=true
+    fi
+
+    get_dirs() {
+        local dir="$1"
+        local -a result=()
+
+        # Add parent directory option if not at root
+        if [ "$dir" != "/" ]; then
+            result+=("..")
+        fi
+
+        # Get subdirectories (visible ones only, sorted)
+        while IFS= read -r d; do
+            [ -n "$d" ] && result+=("$(basename "$d")")
+        done < <(find "$dir" -maxdepth 1 -type d ! -name ".*" ! -path "$dir" 2>/dev/null | sort)
+
+        printf '%s\n' "${result[@]}"
+    }
+
+    draw_folder_menu() {
+        clear
+        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║${NC}  ${GREEN}$title${NC}"
+        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "  ${DIM}↑/↓: Navigate   Enter: Open folder   s: Select this folder   q: Cancel${NC}"
+        echo ""
+        echo -e "  ${BLUE}Current:${NC} ${BOLD}$current_dir${NC}"
+        echo ""
+
+        # Get directories
+        mapfile -t dirs < <(get_dirs "$current_dir")
+        local total=${#dirs[@]}
+
+        if [ $total -eq 0 ]; then
+            echo -e "  ${DIM}(empty directory)${NC}"
+        else
+            # Calculate visible range (show max 15 items)
+            local visible=15
+            local start=0
+            local end=$total
+
+            if [ $total -gt $visible ]; then
+                start=$((current - visible/2))
+                [ $start -lt 0 ] && start=0
+                end=$((start + visible))
+                [ $end -gt $total ] && end=$total && start=$((end - visible))
+            fi
+
+            [ $start -gt 0 ] && echo -e "  ${DIM}  ↑ more above${NC}"
+
+            for ((i=start; i<end; i++)); do
+                local name="${dirs[$i]}"
+                local icon="📁"
+                [ "$name" = ".." ] && icon="📂"
+
+                if [ $i -eq $current ]; then
+                    echo -e "  ${BOLD}▶ $icon $name${NC}"
+                else
+                    echo -e "    $icon $name"
+                fi
+            done
+
+            [ $end -lt $total ] && echo -e "  ${DIM}  ↓ more below${NC}"
+        fi
+
+        echo ""
+        echo -e "  ${DIM}Press 's' to select current folder, 'h' to toggle hidden${NC}"
+    }
+
+    local show_hidden=false
+
+    draw_folder_menu
+
+    while true; do
+        read -rsn1 key
+
+        # Get current dirs for navigation
+        mapfile -t dirs < <(get_dirs "$current_dir")
+        local total=${#dirs[@]}
+
+        case "$key" in
+            q|Q)
+                SELECTED_PATH=""
+                return 1
+                ;;
+            s|S)  # Select current folder
+                SELECTED_PATH="$current_dir"
+                clear
+                return 0
+                ;;
+            h|H)  # Toggle hidden files (future enhancement)
+                show_hidden=!$show_hidden
+                current=0
+                draw_folder_menu
+                ;;
+            "")  # Enter - open selected folder
+                if [ $total -gt 0 ]; then
+                    local selected_name="${dirs[$current]}"
+                    if [ "$selected_name" = ".." ]; then
+                        current_dir=$(dirname "$current_dir")
+                    else
+                        local new_dir="$current_dir/$selected_name"
+                        if [ -d "$new_dir" ]; then
+                            current_dir="$new_dir"
+                        fi
+                    fi
+                    current=0
+                    draw_folder_menu
+                fi
+                ;;
+            $'\x1b')  # Escape sequence (arrow keys)
+                read -rsn2 -t 0.1 key
+                case "$key" in
+                    '[A')  # Up arrow
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total > 0 ? total - 1 : 0))
+                        draw_folder_menu
+                        ;;
+                    '[B')  # Down arrow
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        draw_folder_menu
+                        ;;
+                    '[D')  # Left arrow - go to parent
+                        if [ "$current_dir" != "/" ]; then
+                            current_dir=$(dirname "$current_dir")
+                            current=0
+                            draw_folder_menu
+                        fi
+                        ;;
+                    '[C')  # Right arrow - enter folder
+                        if [ $total -gt 0 ]; then
+                            local selected_name="${dirs[$current]}"
+                            if [ "$selected_name" = ".." ]; then
+                                current_dir=$(dirname "$current_dir")
+                            else
+                                local new_dir="$current_dir/$selected_name"
+                                if [ -d "$new_dir" ]; then
+                                    current_dir="$new_dir"
+                                fi
+                            fi
+                            current=0
+                            draw_folder_menu
+                        fi
+                        ;;
+                esac
+                ;;
+        esac
+    done
+}
+
 # Function to scan for projects
 scan_for_projects() {
     local search_dir="$1"
@@ -474,36 +651,34 @@ main_menu() {
         case $choice in
             1)
                 echo ""
-                read -p "Directory to scan [~/Projects]: " scan_dir
-                scan_dir=${scan_dir:-~/Projects}
-                scan_dir="${scan_dir/#\~/$HOME}"
-                scan_for_projects "$scan_dir"
+                if interactive_folder_select "SELECT DIRECTORY TO SCAN" "$HOME"; then
+                    scan_for_projects "$SELECTED_PATH"
+                else
+                    echo -e "${YELLOW}Cancelled${NC}"
+                    read -p "Press Enter to continue..."
+                fi
                 ;;
             2)
                 echo ""
-                read -p "Project path: " project_path
-                project_path="${project_path/#\~/$HOME}"
-                if [ -d "$project_path" ]; then
-                    add_project_to_registry "$project_path"
+                if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
+                    add_project_to_registry "$SELECTED_PATH"
                     read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
                     echo
                     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        create_workspace_config "$project_path"
+                        create_workspace_config "$SELECTED_PATH"
                     fi
                 else
-                    echo -e "${RED}Directory not found${NC}"
+                    echo -e "${YELLOW}Cancelled${NC}"
                 fi
                 echo ""
                 read -p "Press Enter to continue..."
                 ;;
             3)
                 echo ""
-                read -p "Project path: " project_path
-                project_path="${project_path/#\~/$HOME}"
-                if [ -d "$project_path" ]; then
-                    create_workspace_config "$project_path"
+                if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
+                    create_workspace_config "$SELECTED_PATH"
                 else
-                    echo -e "${RED}Directory not found${NC}"
+                    echo -e "${YELLOW}Cancelled${NC}"
                 fi
                 echo ""
                 read -p "Press Enter to continue..."
