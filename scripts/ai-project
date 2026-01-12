@@ -367,21 +367,15 @@ source "$SCRIPT_DIR/lib/menu.sh"
 menu_init "CLAUDE WORKSPACE v$VERSION"
 menu_set_hint "↑/↓: Navigate   Enter: Select   w: Workspace   s: Simple   q: Quit"
 
-# Store project info for later lookup
-declare -A PROJECT_PATHS
-declare -A PROJECT_WORKSPACES
-
 # Add projects section
 if [ ${#PROJECT_NAMES[@]} -gt 0 ]; then
     for name in "${PROJECT_NAMES[@]}"; do
         proj_path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
-        PROJECT_PATHS["$name"]="$proj_path"
 
         indicator=""
         if [ -f "$proj_path/.claude-workspace.json" ]; then
             count=$(jq '.processes | length' "$proj_path/.claude-workspace.json" 2>/dev/null || echo 0)
             indicator=" [⊞ $count]"
-            PROJECT_WORKSPACES["$name"]="true"
         fi
 
         menu_add_item "project:$name" "$name$indicator" "$proj_path"
