@@ -1,0 +1,24 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs and data
+*.log
+dev-logs/
+logs/
+status/
+dev-markers/
+
+# Registry (user-specific)
+registry.json
+
+# Temp files
+*.tmp
+*.temp

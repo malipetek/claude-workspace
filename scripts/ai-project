@@ -1,0 +1,418 @@
+#!/bin/bash
+
+#══════════════════════════════════════════════════════════════════════════════
+#  CLAUDE WORKSPACE
+#══════════════════════════════════════════════════════════════════════════════
+#
+#  DESCRIPTION:
+#    Workspace manager for Claude Code with Ghostty split-pane integration.
+#    Quickly switch between projects and launch Claude with dev processes.
+#
+#  USAGE:
+#    claude-workspace                    # Interactive project selector
+#    claude-workspace <project_name>     # Open specific project
+#    claude-workspace setup              # Run setup wizard
+#    claude-workspace add <path>         # Add project to registry
+#    claude-workspace --simple <name>    # Launch Claude only (no workspace)
+#
+#  WORKSPACE INTEGRATION:
+#    If a project has .ai-workspace.json, it will automatically:
+#    - Open Ghostty with split panes
+#    - Run Claude on the left
+#    - Run dev processes on the right
+#
+#══════════════════════════════════════════════════════════════════════════════
+
+SCRIPT_DIR="$HOME/.claude-workspace/scripts"
+REGISTRY="$HOME/.claude-workspace/registry.json"
+VERSION="1.0.0"
+
+show_help() {
+    cat << 'EOF'
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  CLAUDE WORKSPACE                                                            ║
+║  Workspace manager for Claude Code                                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+USAGE:
+  claude-workspace                      Interactive project selector
+  claude-workspace <project_name>       Open specific project
+  claude-workspace setup                Run setup wizard
+  claude-workspace add <path>           Add project to registry
+  claude-workspace list                 List registered projects
+  claude-workspace --simple <project>   Launch Claude only (no workspace)
+  claude-workspace --help               Show this help
+
+WORKSPACE MODE:
+  If the project has .ai-workspace.json, it opens Ghostty with:
+
+  ┌─────────────────┬─────────────────┐
+  │                 │   Dev Process 1 │
+  │     Claude      ├─────────────────┤
+  │      Code       │   Dev Process 2 │
+  │                 ├─────────────────┤
+  │                 │   Dev Process 3 │
+  └─────────────────┴─────────────────┘
+
+CONFIG FILE (.ai-workspace.json):
+  {
+    "processes": [
+      {"name": "frontend", "command": "pnpm dev", "cwd": "./frontend"},
+      {"name": "backend", "command": "pnpm dev", "cwd": "./backend"}
+    ]
+  }
+
+KEYBOARD SHORTCUTS (Interactive Mode):
+  ↑/↓               Navigate projects
+  Enter             Launch project
+  w                 Force workspace mode
+  s                 Force simple mode (Claude only)
+  q                 Quit
+
+MORE INFO:
+  https://github.com/YOUR_USERNAME/claude-workspace
+
+EOF
+}
+
+# Function to launch a project
+launch_project() {
+    local project_path="$1"
+    local force_mode="$2"  # "workspace", "simple", or ""
+    local project_name=$(basename "$project_path")
+
+    local workspace_config="$project_path/.ai-workspace.json"
+    local has_workspace=false
+
+    if [ -f "$workspace_config" ]; then
+        has_workspace=true
+    fi
+
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+    echo "║  Launching: $project_name"
+    echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "Path: $project_path"
+
+    # Determine launch mode
+    local use_workspace=false
+
+    if [ "$force_mode" = "workspace" ]; then
+        if [ "$has_workspace" = true ]; then
+            use_workspace=true
+        else
+            echo "Warning: No .ai-workspace.json found, launching Claude only"
+        fi
+    elif [ "$force_mode" = "simple" ]; then
+        use_workspace=false
+    elif [ "$has_workspace" = true ]; then
+        use_workspace=true
+    fi
+
+    if [ "$use_workspace" = true ]; then
+        echo "Mode: Workspace (Ghostty split panes)"
+        echo ""
+
+        # Show processes that will be started
+        local process_count=$(jq '.processes | length' "$workspace_config")
+        echo "Dev processes ($process_count):"
+        for i in $(seq 0 $(($process_count - 1))); do
+            local name=$(jq -r ".processes[$i].name" "$workspace_config")
+            local cmd=$(jq -r ".processes[$i].command" "$workspace_config")
+            echo "  [$((i+1))] $name: $cmd"
+        done
+        echo ""
+
+        # Launch workspace
+        exec "$SCRIPT_DIR/workspace.sh" "$project_path"
+    else
+        echo "Mode: Simple (Claude only)"
+        echo ""
+
+        if [ "$has_workspace" = true ]; then
+            echo "Tip: This project has .ai-workspace.json"
+            echo "     Run 'claude-workspace $project_name' to use workspace mode"
+            echo ""
+        fi
+
+        cd "$project_path" || exit 1
+        exec claude
+    fi
+}
+
+# Function to add a project
+add_project() {
+    local project_path="$1"
+
+    # Resolve to absolute path
+    project_path="$(cd "$project_path" 2>/dev/null && pwd)" || {
+        echo "Error: Directory not found: $1"
+        exit 1
+    }
+
+    local project_name=$(basename "$project_path")
+
+    echo ""
+    read -p "Project name [$project_name]: " custom_name
+    project_name=${custom_name:-$project_name}
+
+    read -p "Description (optional): " description
+
+    # Add to registry
+    local temp=$(mktemp)
+    jq ".projects[\"$project_name\"] = {\"path\": \"$project_path\", \"description\": \"$description\", \"status\": \"active\"}" "$REGISTRY" > "$temp"
+    mv "$temp" "$REGISTRY"
+
+    echo ""
+    echo "✓ Added '$project_name' to registry"
+    echo ""
+
+    if [ ! -f "$project_path/.ai-workspace.json" ]; then
+        read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            exec "$SCRIPT_DIR/setup.sh" "$project_path"
+        fi
+    fi
+}
+
+# Function to list projects
+list_projects() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+    echo "║  Registered Projects                                                         ║"
+    echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+
+    jq -r '.projects | to_entries[] | "\(.key)\t\(.value.path)\t\(.value.description // "")"' "$REGISTRY" 2>/dev/null | while IFS=$'\t' read -r name path desc; do
+        local workspace_indicator=""
+        [ -f "$path/.ai-workspace.json" ] && workspace_indicator=" [workspace]"
+
+        echo "  $name$workspace_indicator"
+        echo "    Path: $path"
+        [ -n "$desc" ] && echo "    Description: $desc"
+        echo ""
+    done
+}
+
+# Check for help flag first
+if [ "$1" = "-h" ] || [ "$1" = "--help" ] || [ "$1" = "help" ]; then
+    show_help
+    exit 0
+fi
+
+if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
+    echo "claude-workspace version $VERSION"
+    exit 0
+fi
+
+# Handle subcommands
+case "$1" in
+    setup)
+        exec "$SCRIPT_DIR/setup.sh"
+        ;;
+    add)
+        if [ -z "$2" ]; then
+            echo "Usage: claude-workspace add <path>"
+            exit 1
+        fi
+        add_project "$2"
+        exit 0
+        ;;
+    list)
+        list_projects
+        exit 0
+        ;;
+esac
+
+# Check for simple mode flag
+FORCE_MODE=""
+if [ "$1" = "--simple" ] || [ "$1" = "-s" ]; then
+    FORCE_MODE="simple"
+    shift
+fi
+
+if [ "$1" = "--workspace" ] || [ "$1" = "-w" ]; then
+    FORCE_MODE="workspace"
+    shift
+fi
+
+# Ensure directories exist
+mkdir -p "$HOME/.claude-workspace"/{scripts,logs,dev-logs,status,dev-markers}
+
+if [ ! -f "$REGISTRY" ]; then
+    echo '{"projects":{}}' > "$REGISTRY"
+fi
+
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is required"
+    echo "Install with: brew install jq"
+    exit 1
+fi
+
+# Get all project names
+PROJECT_NAMES=($(jq -r '.projects | keys[]' "$REGISTRY" 2>/dev/null))
+
+if [ ${#PROJECT_NAMES[@]} -eq 0 ] && [ -z "$1" ]; then
+    echo ""
+    echo "No projects registered yet."
+    echo ""
+    echo "Run 'claude-workspace setup' to get started, or"
+    echo "Run 'claude-workspace add /path/to/project' to add a project."
+    echo ""
+    exit 0
+fi
+
+# If project name provided as argument
+if [ -n "$1" ]; then
+    PROJECT_NAME="$1"
+
+    # Check if project exists
+    PROJECT_PATH=$(jq -r ".projects[\"$PROJECT_NAME\"].path // empty" "$REGISTRY")
+
+    if [ -z "$PROJECT_PATH" ]; then
+        echo "Error: Project '$PROJECT_NAME' not found in registry"
+        echo ""
+        echo "Available projects:"
+        for name in "${PROJECT_NAMES[@]}"; do
+            echo "  - $name"
+        done
+        echo ""
+        echo "Run 'claude-workspace add /path/to/project' to add a new project."
+        exit 1
+    fi
+
+    # Check if directory exists
+    if [ ! -d "$PROJECT_PATH" ]; then
+        echo "Error: Project directory not found: $PROJECT_PATH"
+        exit 1
+    fi
+
+    launch_project "$PROJECT_PATH" "$FORCE_MODE"
+    exit 0
+fi
+
+# Interactive mode - arrow key selection
+selected=0
+total=${#PROJECT_NAMES[@]}
+
+# Hide cursor
+tput civis
+
+# Cleanup on exit
+cleanup() {
+    tput cnorm  # Show cursor
+    tput sgr0   # Reset colors
+}
+trap cleanup EXIT
+
+# Function to draw the menu
+draw_menu() {
+    clear
+    echo "╔══════════════════════════════════════════════════════════════════════════════╗"
+    echo "║  CLAUDE WORKSPACE                                                            ║"
+    echo "╚══════════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "  ↑/↓: Navigate   Enter: Launch   w: Workspace   s: Simple   q: Quit"
+    echo ""
+
+    for i in "${!PROJECT_NAMES[@]}"; do
+        name="${PROJECT_NAMES[$i]}"
+        path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
+        desc=$(jq -r ".projects[\"$name\"].description // \"\"" "$REGISTRY")
+
+        # Check for workspace config
+        local workspace_indicator=""
+        local process_count=0
+        if [ -f "$path/.ai-workspace.json" ]; then
+            process_count=$(jq '.processes | length' "$path/.ai-workspace.json" 2>/dev/null || echo 0)
+            workspace_indicator=" [⊞ $process_count processes]"
+        fi
+
+        if [ $i -eq $selected ]; then
+            tput setaf 0  # Black text
+            tput setab 2  # Green background
+            echo " ▶ $name$workspace_indicator"
+            tput sgr0
+            echo "   Path: $path"
+            if [ -n "$desc" ]; then
+                echo "   Description: $desc"
+            fi
+            if [ $process_count -gt 0 ]; then
+                tput setaf 6  # Cyan
+                echo "   Workspace: Ghostty split panes with $process_count dev processes"
+                tput sgr0
+            fi
+        else
+            if [ -n "$workspace_indicator" ]; then
+                tput setaf 6  # Cyan for workspace indicator
+                echo "   $name$workspace_indicator"
+                tput sgr0
+            else
+                echo "   $name"
+            fi
+            tput setaf 8  # Gray text
+            echo "   $path"
+            tput sgr0
+        fi
+        echo ""
+    done
+}
+
+# Initial draw
+draw_menu
+
+# Read input
+while true; do
+    read -rsn1 key
+
+    case "$key" in
+        q|Q)
+            echo "Exiting..."
+            exit 0
+            ;;
+        w|W)  # Force workspace mode
+            FORCE_MODE="workspace"
+            break
+            ;;
+        s|S)  # Force simple mode
+            FORCE_MODE="simple"
+            break
+            ;;
+        "")  # Enter key
+            break
+            ;;
+        $'\x1b')  # Escape sequence (arrow keys)
+            read -rsn2 -t 0.1 key
+            case "$key" in
+                '[A')  # Up arrow
+                    ((selected--))
+                    if [ $selected -lt 0 ]; then
+                        selected=$((total - 1))
+                    fi
+                    ;;
+                '[B')  # Down arrow
+                    ((selected++))
+                    if [ $selected -ge $total ]; then
+                        selected=0
+                    fi
+                    ;;
+            esac
+            draw_menu
+            ;;
+    esac
+done
+
+# Get selected project
+PROJECT_NAME="${PROJECT_NAMES[$selected]}"
+PROJECT_PATH=$(jq -r ".projects[\"$PROJECT_NAME\"].path" "$REGISTRY")
+
+# Check if directory exists
+if [ ! -d "$PROJECT_PATH" ]; then
+    echo "Error: Project directory not found: $PROJECT_PATH"
+    exit 1
+fi
+
+launch_project "$PROJECT_PATH" "$FORCE_MODE"
