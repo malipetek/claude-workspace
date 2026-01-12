@@ -49,8 +49,26 @@ check_command() {
     fi
 }
 
+# Check bash version (need 4+ for mapfile)
+check_bash_version() {
+    local bash_path=$(which bash)
+    local bash_version=$("$bash_path" --version | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    local major_version=$(echo "$bash_version" | cut -d. -f1)
+
+    if [ "$major_version" -ge 4 ] 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} bash $bash_version"
+        return 0
+    else
+        echo -e "  ${YELLOW}!${NC} bash $bash_version (version 4+ recommended)"
+        echo -e "    ${DIM}Some interactive features may not work${NC}"
+        echo -e "    ${DIM}Install newer bash: brew install bash${NC}"
+        return 1
+    fi
+}
+
 MISSING_DEPS=0
 
+check_bash_version || true
 check_command "jq" "Install with: brew install jq" || MISSING_DEPS=1
 check_command "claude" "Install Claude Code from: https://claude.ai/code" || MISSING_DEPS=1
 

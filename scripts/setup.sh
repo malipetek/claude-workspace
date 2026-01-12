@@ -422,8 +422,11 @@ interactive_folder_select() {
         echo -e "  ${BLUE}Current:${NC} ${BOLD}$current_dir${NC}"
         echo ""
 
-        # Get directories
-        mapfile -t dirs < <(get_dirs "$current_dir")
+        # Get directories (compatible with bash 3.x)
+        local -a dirs=()
+        while IFS= read -r line; do
+            [ -n "$line" ] && dirs+=("$line")
+        done < <(get_dirs "$current_dir")
         local total=${#dirs[@]}
 
         if [ $total -eq 0 ]; then
@@ -469,8 +472,11 @@ interactive_folder_select() {
     while true; do
         read -rsn1 key
 
-        # Get current dirs for navigation
-        mapfile -t dirs < <(get_dirs "$current_dir")
+        # Get current dirs for navigation (compatible with bash 3.x)
+        local -a dirs=()
+        while IFS= read -r line; do
+            [ -n "$line" ] && dirs+=("$line")
+        done < <(get_dirs "$current_dir")
         local total=${#dirs[@]}
 
         case "$key" in
