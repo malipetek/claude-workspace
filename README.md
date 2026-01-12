@@ -20,12 +20,13 @@ A workspace manager for [Claude Code](https://claude.ai/code) that supercharges 
 
 ```bash
 # Clone and install
-git clone https://github.com/YOUR_USERNAME/claude-workspace.git
+git clone https://github.com/malipetek/claude-workspace.git
 cd claude-workspace
 ./install.sh
-
+```
+```bash
 # Or one-liner
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/claude-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/malipetek/claude-workspace/refs/heads/main/install.sh | bash
 ```
 
 ### Setup
