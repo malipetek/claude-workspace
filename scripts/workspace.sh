@@ -7,14 +7,14 @@
 #  DESCRIPTION:
 #    Opens a project in Ghostty with a split-pane workspace:
 #    - Left pane: Claude Code
-#    - Right panes: Dev processes defined in .ai-workspace.json
+#    - Right panes: Dev processes defined in .claude-workspace.json
 #
 #  USAGE:
 #    workspace.sh <project_path>
 #    workspace.sh                    # Uses current directory
 #    workspace.sh --help
 #
-#  CONFIG FILE (.ai-workspace.json):
+#  CONFIG FILE (.claude-workspace.json):
 #    Place in your project root. Example:
 #    {
 #      "processes": [
@@ -52,7 +52,7 @@ USAGE:
   workspace.sh                    Open workspace for current directory
   workspace.sh -h, --help         Show this help
 
-CONFIG FILE (.ai-workspace.json):
+CONFIG FILE (.claude-workspace.json):
   Place in your project root to define dev processes:
 
   {
@@ -110,7 +110,7 @@ if [ ! -d "$PROJECT_PATH" ]; then
     exit 1
 fi
 
-CONFIG_FILE="$PROJECT_PATH/.ai-workspace.json"
+CONFIG_FILE="$PROJECT_PATH/.claude-workspace.json"
 PROJECT_NAME=$(basename "$PROJECT_PATH")
 
 echo "╔══════════════════════════════════════════════════════════════════════════════╗"
@@ -145,7 +145,7 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "Dev processes: $PROCESS_COUNT"
     echo ""
 else
-    echo "No .ai-workspace.json found, launching Claude only"
+    echo "No .claude-workspace.json found, launching Claude only"
     PROCESS_COUNT=0
     CONFIG="{}"
 fi

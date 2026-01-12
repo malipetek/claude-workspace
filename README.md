@@ -60,7 +60,7 @@ claude-workspace --simple my-app
 
 ### Workspace Layout
 
-When you launch a project with a `.ai-workspace.json` config, Claude Workspace creates a Ghostty split-pane layout:
+When you launch a project with a `.claude-workspace.json` config, Claude Workspace creates a Ghostty split-pane layout:
 
 ```
 ┌─────────────────────────────┬─────────────────────────────┐
@@ -105,7 +105,7 @@ Claude exited. Cleaning up workspace...
 
 ## Configuration
 
-### Project Config (`.ai-workspace.json`)
+### Project Config (`.claude-workspace.json`)
 
 Create this file in your project root:
 

@@ -7,7 +7,7 @@
 #  DESCRIPTION:
 #    Opens a project in a tmux session with split panes:
 #    - Left pane: Claude Code
-#    - Right panes: Dev processes defined in .ai-workspace.json
+#    - Right panes: Dev processes defined in .claude-workspace.json
 #
 #  USAGE:
 #    workspace-tmux.sh <project_path>
@@ -97,7 +97,7 @@ if [ ! -d "$PROJECT_PATH" ]; then
     exit 1
 fi
 
-CONFIG_FILE="$PROJECT_PATH/.ai-workspace.json"
+CONFIG_FILE="$PROJECT_PATH/.claude-workspace.json"
 PROJECT_NAME=$(basename "$PROJECT_PATH")
 SESSION_NAME="ai-${PROJECT_NAME}"
 
@@ -142,7 +142,7 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "Dev processes: $PROCESS_COUNT"
     echo ""
 else
-    echo "No .ai-workspace.json found, launching Claude only"
+    echo "No .claude-workspace.json found, launching Claude only"
     PROCESS_COUNT=0
     CONFIG="{}"
 fi

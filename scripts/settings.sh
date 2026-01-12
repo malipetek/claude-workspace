@@ -182,7 +182,7 @@ delegation_slider() {
                 return 0
                 ;;
             $'\x1b')
-                read -rsn2 -t 0.1 key
+                read -rsn2 -t 1 key
                 case "$key" in
                     '[D')  # Left
                         ((current--))
@@ -295,7 +295,7 @@ configure_ai_tools() {
                 draw_tools_menu
                 ;;
             $'\x1b')
-                read -rsn2 -t 0.1 key
+                read -rsn2 -t 1 key
                 case "$key" in
                     '[A')  # Up
                         ((current--))
@@ -352,7 +352,7 @@ configure_delegation_options() {
     while true; do
         show_header
         echo -e "${BOLD}Delegation Behavior${NC}"
-        echo -e "${DIM}Configure how delegated tasks are handled${NC}"
+        echo -e "${DIM}Configure how Claude delegates tasks to other AI tools${NC}"
         echo ""
 
         local visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
@@ -363,16 +363,40 @@ configure_delegation_options() {
         [ "$visible" = "true" ] && visible_status="${GREEN}On${NC}"
         [ "$branches" = "true" ] && branches_status="${GREEN}On${NC}"
 
-        echo -e "  ${CYAN}[1]${NC} Visible delegation: $visible_status"
-        echo -e "      ${DIM}Open split terminal to see AI working${NC}"
+        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${CYAN}│${NC} ${BOLD}[1] Visible Delegation${NC}                                        [$visible_status]"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     When enabled, delegated tasks open in a Ghostty split pane so you"
+        echo -e "${CYAN}│${NC}     can watch the AI work in real-time. Useful for:"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Debugging delegation issues"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Learning how other AIs approach problems"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Monitoring progress on complex tasks"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     ${DIM}Layout: Claude on left, delegated AI on right${NC}"
+        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --visible${NC}"
+        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
         echo ""
-        echo -e "  ${CYAN}[2]${NC} Branch isolation: $branches_status"
-        echo -e "      ${DIM}Create feature branches for each delegation${NC}"
+        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+        echo -e "${CYAN}│${NC} ${BOLD}[2] Branch Isolation${NC}                                          [$branches_status]"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     When enabled, each delegated task runs on its own git branch."
+        echo -e "${CYAN}│${NC}     This prevents multiple AI agents from conflicting. Benefits:"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} No conflicts when running parallel delegations"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Easy to review changes before merging"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Safe to discard failed attempts"
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Clear git history of who did what"
+        echo -e "${CYAN}│${NC}"
+        echo -e "${CYAN}│${NC}     ${DIM}Branch format: delegate/<ai>/<task-summary>-<timestamp>${NC}"
+        echo -e "${CYAN}│${NC}     ${DIM}Example: delegate/gemini/write-unit-tests-20250113_143022${NC}"
+        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --branch or --no-branch${NC}"
+        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
         echo ""
-        echo -e "  ${CYAN}[q]${NC} Back"
+        echo -e "  ${CYAN}[q]${NC} Back to main menu"
         echo ""
 
-        read -p "Choice: " -n 1 -r choice
+        read -p "Toggle option (1/2) or q to go back: " -n 1 -r choice
         echo ""
 
         case $choice in
@@ -382,6 +406,13 @@ configure_delegation_options() {
                 local temp=$(mktemp)
                 jq ".delegation.visible_by_default = $new_val" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
+                echo ""
+                if [ "$new_val" = "true" ]; then
+                    echo -e "${GREEN}✓${NC} Visible delegation enabled - tasks will open in split panes"
+                else
+                    echo -e "${YELLOW}✓${NC} Visible delegation disabled - tasks run in background"
+                fi
+                sleep 1
                 ;;
             2)
                 local new_val="true"
@@ -389,6 +420,14 @@ configure_delegation_options() {
                 local temp=$(mktemp)
                 jq ".delegation.use_branches = $new_val" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
+                echo ""
+                if [ "$new_val" = "true" ]; then
+                    echo -e "${GREEN}✓${NC} Branch isolation enabled - each task gets its own branch"
+                else
+                    echo -e "${YELLOW}✓${NC} Branch isolation disabled - tasks work on current branch"
+                    echo -e "${YELLOW}  Warning: Parallel delegations may conflict!${NC}"
+                fi
+                sleep 1
                 ;;
             q|Q)
                 return

@@ -6,7 +6,7 @@
 #
 #  Interactive setup wizard to:
 #  - Find and register projects
-#  - Create .ai-workspace.json configs
+#  - Create .claude-workspace.json configs
 #  - Configure dev processes
 #
 #  USAGE:
@@ -129,7 +129,7 @@ detect_project_type() {
 # Function to create workspace config interactively
 create_workspace_config() {
     local project_path="$1"
-    local config_file="$project_path/.ai-workspace.json"
+    local config_file="$project_path/.claude-workspace.json"
 
     show_header
     echo -e "${BOLD}Setting up workspace for:${NC} $(basename "$project_path")"
@@ -141,7 +141,7 @@ create_workspace_config() {
     echo ""
 
     if [ -f "$config_file" ]; then
-        echo -e "${YELLOW}Existing .ai-workspace.json found.${NC}"
+        echo -e "${YELLOW}Existing .claude-workspace.json found.${NC}"
         read -p "Overwrite? [y/N] " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -281,7 +281,7 @@ interactive_multiselect() {
             local checkbox="[ ]"
             local has_workspace=""
 
-            [ -f "$item/.ai-workspace.json" ] && has_workspace=" ${CYAN}[configured]${NC}"
+            [ -f "$item/.claude-workspace.json" ] && has_workspace=" ${CYAN}[configured]${NC}"
 
             if [ "${selected[$i]}" -eq 1 ]; then
                 checkbox="${GREEN}[✓]${NC}"
@@ -339,7 +339,7 @@ interactive_multiselect() {
                 break
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn2 -t 0.1 key
+                read -rsn2 -t 1 key
                 case "$key" in
                     '[A')  # Up arrow
                         ((current--))
@@ -510,7 +510,7 @@ interactive_folder_select() {
                 fi
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn2 -t 0.1 key
+                read -rsn2 -t 1 key
                 case "$key" in
                     '[A')  # Up arrow
                         ((current--))
@@ -611,15 +611,15 @@ scan_for_projects() {
 
             add_project_to_registry "$project"
 
-            if [ ! -f "$project/.ai-workspace.json" ]; then
+            if [ ! -f "$project/.claude-workspace.json" ]; then
                 echo ""
-                read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
+                read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
                 echo
                 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
                     create_workspace_config "$project"
                 fi
             else
-                echo -e "${DIM}(already has .ai-workspace.json)${NC}"
+                echo -e "${DIM}(already has .claude-workspace.json)${NC}"
             fi
 
             echo ""
@@ -669,7 +669,7 @@ main_menu() {
                 echo ""
                 if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
                     add_project_to_registry "$SELECTED_PATH"
-                    read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
+                    read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
                     echo
                     if [[ ! $REPLY =~ ^[Nn]$ ]]; then
                         create_workspace_config "$SELECTED_PATH"

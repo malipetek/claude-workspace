@@ -16,7 +16,7 @@
 #    claude-workspace --simple <name>    # Launch Claude only (no workspace)
 #
 #  WORKSPACE INTEGRATION:
-#    If a project has .ai-workspace.json, it will automatically:
+#    If a project has .claude-workspace.json, it will automatically:
 #    - Open Ghostty with split panes
 #    - Run Claude on the left
 #    - Run dev processes on the right
@@ -25,13 +25,13 @@
 
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 REGISTRY="$HOME/.claude-workspace/registry.json"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 show_help() {
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║  CLAUDE WORKSPACE                                                            ║
-║  Workspace manager for Claude Code                                           ║
+║  Workspace manager for Claude Code with AI delegation                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
 USAGE:
@@ -46,7 +46,7 @@ USAGE:
   claude-workspace --help               Show this help
 
 WORKSPACE MODE:
-  If the project has .ai-workspace.json, it opens Ghostty with:
+  If the project has .claude-workspace.json, it opens Ghostty with split panes:
 
   ┌─────────────────┬─────────────────┐
   │                 │   Dev Process 1 │
@@ -56,13 +56,54 @@ WORKSPACE MODE:
   │                 │   Dev Process 3 │
   └─────────────────┴─────────────────┘
 
-CONFIG FILE (.ai-workspace.json):
+CONFIG FILE (.claude-workspace.json):
+  Create this file in your project root to define dev processes:
+
   {
     "processes": [
-      {"name": "frontend", "command": "pnpm dev", "cwd": "./frontend"},
-      {"name": "backend", "command": "pnpm dev", "cwd": "./backend"}
+      {
+        "name": "frontend",
+        "command": "pnpm dev",
+        "cwd": "./frontend"
+      },
+      {
+        "name": "backend",
+        "command": "pnpm start:dev",
+        "cwd": "./backend"
+      },
+      {
+        "name": "database",
+        "command": "docker compose up db",
+        "cwd": "."
+      },
+      {
+        "name": "storybook",
+        "command": "pnpm storybook",
+        "cwd": "./frontend"
+      }
     ]
   }
+
+  Process options:
+    name      Display name for the process (shown in terminal title)
+    command   Shell command to run (supports any shell command)
+    cwd       Working directory relative to project root ("." for root)
+
+AI DELEGATION:
+  Claude can delegate tasks to other AI tools (Gemini, OpenCode, etc.)
+
+  Configure with: claude-workspace settings
+
+  Delegation modes:
+    --visible    Watch AI work in a split terminal pane
+    --branch     Isolate work on a feature branch (prevents conflicts)
+
+  Delegation levels (0-4):
+    0: Disabled   - Claude handles everything
+    1: Minimal    - Only research/summarization
+    2: Moderate   - Routine tasks (tests, types, docs)
+    3: Aggressive - Most implementation, Claude reviews
+    4: Orchestrator - Claude only orchestrates
 
 KEYBOARD SHORTCUTS (Interactive Mode):
   ↑/↓               Navigate projects
@@ -72,7 +113,7 @@ KEYBOARD SHORTCUTS (Interactive Mode):
   q                 Quit
 
 MORE INFO:
-  https://github.com/YOUR_USERNAME/claude-workspace
+  https://github.com/malipetek/claude-workspace
 
 EOF
 }
@@ -83,7 +124,7 @@ launch_project() {
     local force_mode="$2"  # "workspace", "simple", or ""
     local project_name=$(basename "$project_path")
 
-    local workspace_config="$project_path/.ai-workspace.json"
+    local workspace_config="$project_path/.claude-workspace.json"
     local has_workspace=false
 
     if [ -f "$workspace_config" ]; then
@@ -104,7 +145,7 @@ launch_project() {
         if [ "$has_workspace" = true ]; then
             use_workspace=true
         else
-            echo "Warning: No .ai-workspace.json found, launching Claude only"
+            echo "Warning: No .claude-workspace.json found, launching Claude only"
         fi
     elif [ "$force_mode" = "simple" ]; then
         use_workspace=false
@@ -133,7 +174,7 @@ launch_project() {
         echo ""
 
         if [ "$has_workspace" = true ]; then
-            echo "Tip: This project has .ai-workspace.json"
+            echo "Tip: This project has .claude-workspace.json"
             echo "     Run 'claude-workspace $project_name' to use workspace mode"
             echo ""
         fi
@@ -170,8 +211,8 @@ add_project() {
     echo "✓ Added '$project_name' to registry"
     echo ""
 
-    if [ ! -f "$project_path/.ai-workspace.json" ]; then
-        read -p "Create .ai-workspace.json? [Y/n] " -n 1 -r
+    if [ ! -f "$project_path/.claude-workspace.json" ]; then
+        read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             exec "$SCRIPT_DIR/setup.sh" "$project_path"
@@ -189,7 +230,7 @@ list_projects() {
 
     jq -r '.projects | to_entries[] | "\(.key)\t\(.value.path)\t\(.value.description // "")"' "$REGISTRY" 2>/dev/null | while IFS=$'\t' read -r name path desc; do
         local workspace_indicator=""
-        [ -f "$path/.ai-workspace.json" ] && workspace_indicator=" [workspace]"
+        [ -f "$path/.claude-workspace.json" ] && workspace_indicator=" [workspace]"
 
         echo "  $name$workspace_indicator"
         echo "    Path: $path"
@@ -361,8 +402,8 @@ draw_menu() {
         # Check for workspace config
         local workspace_indicator=""
         local process_count=0
-        if [ -f "$path/.ai-workspace.json" ]; then
-            process_count=$(jq '.processes | length' "$path/.ai-workspace.json" 2>/dev/null || echo 0)
+        if [ -f "$path/.claude-workspace.json" ]; then
+            process_count=$(jq '.processes | length' "$path/.claude-workspace.json" 2>/dev/null || echo 0)
             workspace_indicator=" [⊞ $process_count processes]"
         fi
 
@@ -420,7 +461,7 @@ while true; do
             break
             ;;
         $'\x1b')  # Escape sequence (arrow keys)
-            read -rsn2 -t 0.1 key
+            read -rsn2 -t 1 key
             case "$key" in
                 '[A')  # Up arrow
                     ((selected--))

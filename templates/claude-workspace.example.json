@@ -1,0 +1,24 @@
+{
+  "processes": [
+    {
+      "name": "frontend",
+      "command": "pnpm dev",
+      "cwd": "./frontend"
+    },
+    {
+      "name": "backend",
+      "command": "pnpm start:dev",
+      "cwd": "./backend"
+    },
+    {
+      "name": "database",
+      "command": "docker compose up db redis",
+      "cwd": "."
+    },
+    {
+      "name": "worker",
+      "command": "pnpm run worker:dev",
+      "cwd": "./backend"
+    }
+  ]
+}
