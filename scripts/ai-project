@@ -479,6 +479,15 @@ if ! menu_run_with_extras; then
     exit 0
 fi
 
+# Get the selected result
+SELECTED_RESULT="$MENU_RESULT"
+
+# Handle empty result
+if [ -z "$SELECTED_RESULT" ]; then
+    echo "No selection made"
+    exit 0
+fi
+
 # Parse result and handle selection
 case "$SELECTED_RESULT" in
     project:*)
