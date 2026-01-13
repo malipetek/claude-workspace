@@ -291,16 +291,27 @@ configure_ai_tools() {
 
     # Pre-load tool data
     local tool_names=() tool_cmds=() tool_enabled=() tool_installed=()
-    reload_tool_data() {
+    
+    # Load initial state
+    for ((i=0; i<total; i++)); do
+        local tool="${tools[$i]}"
+        tool_names[$i]=$(jq -r ".ai_tools.$tool.name" "$SETTINGS_FILE")
+        tool_cmds[$i]=$(jq -r ".ai_tools.$tool.command" "$SETTINGS_FILE")
+        tool_enabled[$i]=$(jq -r ".ai_tools.$tool.enabled" "$SETTINGS_FILE")
+        tool_installed[$i]=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
+    done
+
+    # Save changes to disk
+    save_changes() {
+        local temp=$(mktemp)
+        cp "$SETTINGS_FILE" "$temp"
         for ((i=0; i<total; i++)); do
             local tool="${tools[$i]}"
-            tool_names[$i]=$(jq -r ".ai_tools.$tool.name" "$SETTINGS_FILE")
-            tool_cmds[$i]=$(jq -r ".ai_tools.$tool.command" "$SETTINGS_FILE")
-            tool_enabled[$i]=$(jq -r ".ai_tools.$tool.enabled" "$SETTINGS_FILE")
-            tool_installed[$i]=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
+            local enabled="${tool_enabled[$i]}"
+            jq ".ai_tools.$tool.enabled = $enabled" "$temp" > "${temp}.new" && mv "${temp}.new" "$temp"
         done
+        mv "$temp" "$SETTINGS_FILE"
     }
-    reload_tool_data
 
     enter_alt_screen
     hide_cursor
@@ -372,12 +383,14 @@ configure_ai_tools() {
 
         case "$key" in
             q|Q)
+                save_changes
                 show_cursor
                 exit_alt_screen
                 trap - EXIT
                 return 1
                 ;;
             "")  # Enter
+                save_changes
                 show_cursor
                 exit_alt_screen
                 trap - EXIT
@@ -385,28 +398,24 @@ configure_ai_tools() {
                 ;;
             a|A)  # Auto-detect
                 detect_installed_tools
-                # Enable all installed tools
-                for tool in "${tools[@]}"; do
+                # Reload data
+                for ((i=0; i<total; i++)); do
+                    local tool="${tools[$i]}"
                     local installed=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
+                    tool_installed[$i]=$installed
                     if [ "$installed" = "true" ]; then
-                        local temp=$(mktemp)
-                        jq ".ai_tools.$tool.enabled = true" "$SETTINGS_FILE" > "$temp"
-                        mv "$temp" "$SETTINGS_FILE"
+                        tool_enabled[$i]="true"
                     fi
                 done
-                reload_tool_data
                 draw_all_tools
                 draw_footer
                 ;;
             " ")  # Space - toggle
-                local tool="${tools[$current]}"
-                local new_val="true"
-                [ "${tool_enabled[$current]}" = "true" ] && new_val="false"
-
-                local temp=$(mktemp)
-                jq ".ai_tools.$tool.enabled = $new_val" "$SETTINGS_FILE" > "$temp"
-                mv "$temp" "$SETTINGS_FILE"
-                tool_enabled[$current]=$new_val
+                if [ "${tool_enabled[$current]}" = "true" ]; then
+                    tool_enabled[$current]="false"
+                else
+                    tool_enabled[$current]="true"
+                fi
                 draw_tool_item $current
                 draw_footer
                 ;;
