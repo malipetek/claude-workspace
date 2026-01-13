@@ -19,6 +19,81 @@
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 SETTINGS_FILE="$HOME/.claude-workspace/settings.json"
 
+# Source TLDR library for context extraction
+source "$SCRIPT_DIR/lib/tldr.sh" 2>/dev/null || true
+
+#══════════════════════════════════════════════════════════════════════════════
+# TLDR Context Enhancement
+#══════════════════════════════════════════════════════════════════════════════
+
+get_tldr_context() {
+    local task="$1"
+    local project="$2"
+    local context=""
+
+    # Check if tldr is available and project has indexes
+    if ! command -v tldr &>/dev/null; then
+        return
+    fi
+
+    if [ ! -d "$project/.tldr" ]; then
+        return
+    fi
+
+    # Try to get semantic search results for the task
+    local search_results
+    search_results=$(cd "$project" && timeout 10 tldr semantic "$task" --limit 5 2>/dev/null | head -50)
+
+    if [ -n "$search_results" ]; then
+        context="
+
+## Relevant Code Context (from codebase analysis)
+
+\`\`\`
+$search_results
+\`\`\`
+"
+    fi
+
+    echo "$context"
+}
+
+build_enhanced_prompt() {
+    local task="$1"
+    local project="$2"
+    local project_name=$(basename "$project")
+
+    # Get TLDR context if available
+    local tldr_context
+    tldr_context=$(get_tldr_context "$task" "$project")
+
+    # Build the enhanced prompt
+    local prompt="$task"
+
+    # Add project context
+    prompt="$prompt
+
+PROJECT: $project_name
+PATH: $project"
+
+    # Add TLDR context if available
+    if [ -n "$tldr_context" ]; then
+        prompt="$prompt
+$tldr_context"
+    fi
+
+    # Add instructions for the AI
+    prompt="$prompt
+
+INSTRUCTIONS:
+- Focus on the task described above
+- Make necessary code changes
+- Commit your changes with descriptive messages
+- Report what you did when complete"
+
+    echo "$prompt"
+}
+
 # Parse arguments
 AI_NAME=""
 TASK_DESC=""
@@ -96,22 +171,12 @@ if [ $AUTH_STATUS -eq 2 ]; then
 fi
 
 if [ $AUTH_STATUS -eq 1 ]; then
-    # Auth required
-    cat > "$STATUS_FILE" << EOF
-{
-  "task_id": "$TASK_ID",
-  "ai": "$AI_NAME",
-  "status": "auth_required",
-  "error": "auth_required",
-  "message": "$AI_NAME CLI requires authentication. Run '$AI_NAME' manually in terminal to login.",
-  "task": "$TASK_DESC",
-  "project": "$PROJECT_PATH",
-  "started": "$(date -Iseconds)",
-  "log_file": "$LOG_FILE"
-}
-EOF
-    cat "$STATUS_FILE"
-    exit 1
+    # Auth required - fall back to interactive mode
+    echo "{\"task_id\": \"$TASK_ID\", \"status\": \"auth_required\", \"fallback\": \"interactive\", \"message\": \"Opening interactive pane for authentication...\"}"
+
+    # Use interactive delegation which opens a Ghostty split pane
+    exec "$SCRIPT_DIR/delegate-interactive.sh" "$AI_NAME" "$TASK_DESC" "$PROJECT_PATH"
+    exit $?
 fi
 
 # Create initial status file
@@ -166,6 +231,9 @@ EOF
         fi
     fi
 
+    # Build enhanced prompt with TLDR context
+    ENHANCED_PROMPT=$(build_enhanced_prompt "$TASK_DESC" "$PROJECT_PATH")
+
     # Log header
     {
         echo "=== ASYNC TASK DELEGATION ==="
@@ -178,24 +246,29 @@ EOF
         echo "Started: $(date)"
         echo "=============================="
         echo ""
+        echo "Enhanced Prompt:"
+        echo "$ENHANCED_PROMPT"
+        echo ""
+        echo "=============================="
+        echo ""
     } > "$LOG_FILE"
 
-    # Execute based on AI
+    # Execute based on AI (using enhanced prompt with context)
     case $AI_NAME in
         gemini)
-            echo "$TASK_DESC" | gemini --yolo >> "$LOG_FILE" 2>&1
+            echo "$ENHANCED_PROMPT" | gemini --yolo >> "$LOG_FILE" 2>&1
             EXIT_CODE=$?
             ;;
         zai|opencode)
-            echo "$TASK_DESC" | opencode >> "$LOG_FILE" 2>&1
+            echo "$ENHANCED_PROMPT" | opencode >> "$LOG_FILE" 2>&1
             EXIT_CODE=$?
             ;;
         codex)
-            echo "$TASK_DESC" | codex >> "$LOG_FILE" 2>&1
+            echo "$ENHANCED_PROMPT" | codex >> "$LOG_FILE" 2>&1
             EXIT_CODE=$?
             ;;
         aider)
-            aider --message "$TASK_DESC" >> "$LOG_FILE" 2>&1
+            aider --message "$ENHANCED_PROMPT" >> "$LOG_FILE" 2>&1
             EXIT_CODE=$?
             ;;
         *)
@@ -203,7 +276,7 @@ EOF
             if [ -f "$SETTINGS_FILE" ]; then
                 CMD=$(jq -r ".ai_tools.$AI_NAME.command // empty" "$SETTINGS_FILE")
                 if [ -n "$CMD" ]; then
-                    echo "$TASK_DESC" | "$CMD" >> "$LOG_FILE" 2>&1
+                    echo "$ENHANCED_PROMPT" | "$CMD" >> "$LOG_FILE" 2>&1
                     EXIT_CODE=$?
                 else
                     echo "Unknown AI: $AI_NAME" >> "$LOG_FILE"
