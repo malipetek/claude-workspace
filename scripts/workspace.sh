@@ -41,6 +41,11 @@
 
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 
+# Source TLDR library
+if [ -f "$SCRIPT_DIR/lib/tldr.sh" ]; then
+    source "$SCRIPT_DIR/lib/tldr.sh"
+fi
+
 show_help() {
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -148,6 +153,37 @@ else
     echo "No .claude-workspace.json found, launching Claude only"
     PROCESS_COUNT=0
     CONFIG="{}"
+fi
+
+# TLDR Integration
+if [ -f "$CONFIG_FILE" ]; then
+    TLDR_ENABLED=$(echo "$CONFIG" | jq -r '.tldr.enabled // false')
+
+    if [ "$TLDR_ENABLED" = "true" ]; then
+        echo ""
+        echo "TLDR Code Analysis"
+
+        # Warm indexes if enabled
+        if type warm_tldr_indexes &>/dev/null; then
+            warm_tldr_indexes "$PROJECT_PATH"
+
+            # Configure MCP if enabled
+            if type configure_tldr_mcp &>/dev/null; then
+                configure_tldr_mcp "$PROJECT_PATH"
+            fi
+
+            # Update CLAUDE.md if needed
+            if type update_project_claude_md &>/dev/null; then
+                CLAUDE_MD="$PROJECT_PATH/CLAUDE.md"
+                if [ ! -f "$CLAUDE_MD" ] || ! grep -q "TLDR Code Analysis" "$CLAUDE_MD" 2>/dev/null; then
+                    update_project_claude_md "$PROJECT_PATH"
+                fi
+            fi
+        else
+            echo "  Warning: TLDR library not loaded"
+        fi
+        echo ""
+    fi
 fi
 
 # Build the process commands

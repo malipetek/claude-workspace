@@ -78,6 +78,13 @@ echo -e "${BLUE}Optional dependencies:${NC}"
 check_command "ghostty" "For split-pane workspaces: https://ghostty.org" || true
 check_command "gemini" "For AI delegation: Gemini CLI" || true
 
+# Check for llm-tldr (not the man-pages tldr)
+if command -v tldr &> /dev/null && tldr --help 2>&1 | grep -q "warm\|semantic"; then
+    echo -e "  ${GREEN}✓${NC} llm-tldr (code analysis for 95% token savings)"
+else
+    echo -e "  ${YELLOW}○${NC} llm-tldr - pip install llm-tldr (95% token savings)"
+fi
+
 if [ $MISSING_DEPS -eq 1 ]; then
     echo ""
     echo -e "${YELLOW}Warning: Some required dependencies are missing.${NC}"

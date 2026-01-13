@@ -20,5 +20,14 @@
       "command": "pnpm run worker:dev",
       "cwd": "./backend"
     }
-  ]
+  ],
+  "hooks": {
+    "before_start": ""
+  },
+  "tldr": {
+    "enabled": false,
+    "autoWarm": true,
+    "autoMcp": true,
+    "ignorePatterns": []
+  }
 }

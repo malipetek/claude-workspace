@@ -608,6 +608,101 @@ configure_delegation_options() {
     done
 }
 
+# Configure TLDR settings
+configure_tldr_settings() {
+    show_cursor
+    exit_alt_screen
+
+    echo ""
+    echo -e "${BLUE}TLDR Code Analysis Settings${NC}"
+    echo ""
+
+    # Check if llm-tldr is installed
+    local tldr_installed=false
+    if command -v tldr &> /dev/null && tldr --help 2>&1 | grep -q "warm\|semantic"; then
+        tldr_installed=true
+        local version=$(tldr --version 2>/dev/null || echo "unknown")
+        echo -e "  ${GREEN}✓${NC} llm-tldr installed: $version"
+    else
+        echo -e "  ${RED}✗${NC} llm-tldr not installed"
+        echo ""
+        echo -e "  ${DIM}To install llm-tldr:${NC}"
+        echo -e "  ${CYAN}pip install llm-tldr${NC}"
+        echo ""
+        echo -e "  ${DIM}llm-tldr provides 95% token reduction through code analysis.${NC}"
+        echo -e "  ${DIM}Learn more: https://github.com/parcadei/llm-tldr${NC}"
+        echo ""
+        read -p "Press Enter to continue..."
+        enter_alt_screen
+        hide_cursor
+        return
+    fi
+
+    # Get current defaults from settings
+    local default_enabled=$(jq -r '.tldr.defaultEnabled // false' "$SETTINGS_FILE" 2>/dev/null)
+    local default_auto_warm=$(jq -r '.tldr.defaultAutoWarm // true' "$SETTINGS_FILE" 2>/dev/null)
+    local warm_timeout=$(jq -r '.tldr.warmTimeout // 300' "$SETTINGS_FILE" 2>/dev/null)
+
+    echo ""
+    echo -e "${BLUE}Default Settings for New Projects${NC}"
+    echo ""
+
+    # Toggle default enabled
+    echo -e "  Current default enabled: ${CYAN}$default_enabled${NC}"
+    read -p "  Enable TLDR by default for new projects? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        default_enabled="true"
+    else
+        default_enabled="false"
+    fi
+
+    # Toggle default auto-warm
+    echo ""
+    echo -e "  Current auto-warm default: ${CYAN}$default_auto_warm${NC}"
+    read -p "  Auto-warm indexes by default? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        default_auto_warm="false"
+    else
+        default_auto_warm="true"
+    fi
+
+    # Warm timeout
+    echo ""
+    echo -e "  Current warm timeout: ${CYAN}${warm_timeout}s${NC}"
+    read -p "  Warm timeout in seconds [$warm_timeout]: " new_timeout
+    [ -n "$new_timeout" ] && warm_timeout="$new_timeout"
+
+    # Save settings
+    local temp=$(mktemp)
+    jq ".tldr = {
+        \"installed\": $tldr_installed,
+        \"defaultEnabled\": $default_enabled,
+        \"defaultAutoWarm\": $default_auto_warm,
+        \"warmTimeout\": $warm_timeout
+    }" "$SETTINGS_FILE" > "$temp" && mv "$temp" "$SETTINGS_FILE"
+
+    echo ""
+    echo -e "${GREEN}✓${NC} TLDR settings saved"
+    echo ""
+
+    # Offer to test
+    read -p "Test TLDR with current directory? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo ""
+        echo -e "${BLUE}Running: tldr tree .${NC}"
+        tldr tree . 2>&1 | head -20
+        echo ""
+    fi
+
+    read -p "Press Enter to continue..."
+
+    enter_alt_screen
+    hide_cursor
+}
+
 # Generate CLAUDE.md based on settings
 generate_claude_md() {
     local level=$(get_delegation_level)
@@ -847,12 +942,13 @@ show_settings() {
 # Main settings menu - polished style
 main_menu() {
     # Menu items: id, label, description
-    local -a menu_ids=("delegation" "tools" "custom" "behavior" "apply" "show" "reset" "done")
+    local -a menu_ids=("delegation" "tools" "custom" "behavior" "tldr" "apply" "show" "reset" "done")
     local -a menu_labels=(
         "Delegation Level"
         "AI Tools"
         "Add Custom Tool"
         "Delegation Behavior"
+        "TLDR Settings"
         "Apply Settings"
         "Show Settings"
         "Reset to Defaults"
@@ -863,6 +959,7 @@ main_menu() {
         "Enable/disable AI tools"
         "Add a custom command"
         "Visibility and branches"
+        "Code analysis tool config"
         "Update CLAUDE.md"
         "Display current config"
         "Reset all settings"
@@ -965,6 +1062,12 @@ main_menu() {
                         ;;
                     behavior)
                         configure_delegation_options
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    tldr)
+                        configure_tldr_settings
                         draw_header
                         draw_all_items
                         draw_description

@@ -262,13 +262,70 @@ create_workspace_config() {
         echo ""
     done
 
+    # TLDR Configuration
+    local tldr_enabled="false"
+    local tldr_auto_warm="true"
+    local tldr_auto_mcp="true"
+
+    echo ""
+    echo -e "${BLUE}TLDR Code Analysis${NC}"
+    echo ""
+
+    # Check if llm-tldr is installed
+    local tldr_installed=false
+    if command -v tldr &> /dev/null && tldr --help 2>&1 | grep -q "warm\|semantic"; then
+        tldr_installed=true
+        echo -e "  ${GREEN}✓${NC} llm-tldr detected"
+    else
+        echo -e "  ${YELLOW}!${NC} llm-tldr not installed"
+        echo -e "  ${DIM}Install with: pip install llm-tldr${NC}"
+    fi
+
+    if [ "$tldr_installed" = true ]; then
+        echo ""
+        read -p "Enable TLDR for this project? [Y/n] " -n 1 -r
+        echo
+
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            tldr_enabled="true"
+
+            read -p "Auto-warm indexes on workspace open? [Y/n] " -n 1 -r
+            echo
+            [[ $REPLY =~ ^[Nn]$ ]] && tldr_auto_warm="false"
+
+            read -p "Auto-configure MCP server? [Y/n] " -n 1 -r
+            echo
+            [[ $REPLY =~ ^[Nn]$ ]] && tldr_auto_mcp="false"
+
+            # Warm indexes now
+            echo ""
+            echo -e "${BLUE}Warming TLDR indexes...${NC}"
+            echo -e "${DIM}This may take a moment on first run${NC}"
+
+            if timeout 300 tldr warm "$project_path" 2>&1; then
+                echo -e "${GREEN}✓${NC} TLDR indexes ready"
+            else
+                echo -e "${YELLOW}Warning: TLDR warm timed out or failed${NC}"
+            fi
+        fi
+    fi
+
     local processes_json=$(printf '%s\n' "${processes[@]}" | paste -sd ',' -)
 
     cat > "$config_file" << EOF
 {
   "processes": [
     ${processes_json}
-  ]
+  ],
+  "hooks": {
+    "before_start": ""
+  },
+  "tldr": {
+    "enabled": ${tldr_enabled},
+    "autoWarm": ${tldr_auto_warm},
+    "autoMcp": ${tldr_auto_mcp},
+    "ignorePatterns": []
+  }
 }
 EOF
 
