@@ -312,44 +312,43 @@ menu_run() {
         local prev_selected=$MENU_SELECTED
 
         case "$key" in
-            q|Q|$'\x1b')
-                # Check if it's just escape or escape sequence
-                if [ "$key" = $'\x1b' ]; then
-                    read -rsn1 -t 0.1 next_key
-                    if [ -z "$next_key" ]; then
-                        # Just escape, quit
-                        MENU_RESULT=""
-                        menu_show_cursor
-                        menu_exit_alt_screen
-                        trap - EXIT
-                        return 1
-                    else
-                        # Escape sequence, handle arrow keys
-                        read -rsn1 -t 0.1 third_key
-                        case "${next_key}${third_key}" in
-                            '[A')  # Up
-                                ((MENU_SELECTED--))
-                                [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
-                                menu_skip_separator "up"
-                                ;;
-                            '[B')  # Down
-                                ((MENU_SELECTED++))
-                                [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
-                                menu_skip_separator "down"
-                                ;;
-                        esac
-                        if [ $prev_selected -ne $MENU_SELECTED ]; then
-                            menu_redraw_changed $prev_selected $MENU_SELECTED
-                        fi
-                    fi
-                else
-                    # q/Q pressed
+            q|Q)
+                MENU_RESULT=""
+                menu_show_cursor
+                menu_exit_alt_screen
+                trap - EXIT
+                return 1
+                ;;
+            $'\x1b')
+                # Read remaining escape sequence bytes
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
+                    # Just escape, quit
                     MENU_RESULT=""
                     menu_show_cursor
                     menu_exit_alt_screen
                     trap - EXIT
                     return 1
                 fi
+                # Handle arrow keys
+                case "$seq" in
+                    '[A')  # Up
+                        ((MENU_SELECTED--))
+                        [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
+                        menu_skip_separator "up"
+                        if [ $prev_selected -ne $MENU_SELECTED ]; then
+                            menu_redraw_changed $prev_selected $MENU_SELECTED
+                        fi
+                        ;;
+                    '[B')  # Down
+                        ((MENU_SELECTED++))
+                        [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
+                        menu_skip_separator "down"
+                        if [ $prev_selected -ne $MENU_SELECTED ]; then
+                            menu_redraw_changed $prev_selected $MENU_SELECTED
+                        fi
+                        ;;
+                esac
                 ;;
             "")  # Enter
                 MENU_RESULT="${MENU_IDS[$MENU_SELECTED]}"

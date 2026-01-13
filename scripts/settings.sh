@@ -227,38 +227,39 @@ delegation_slider() {
         local prev=$current
 
         case "$key" in
-            q|Q|$'\x1b')
-                if [ "$key" = $'\x1b' ]; then
-                    read -rsn1 -t 0.1 next_key
-                    if [ -z "$next_key" ]; then
-                        # Just escape
-                        show_cursor
-                        exit_alt_screen
-                        trap - EXIT
-                        return 1
-                    else
-                        read -rsn1 -t 0.1 third_key
-                        case "${next_key}${third_key}" in
-                            '[A')  # Up
-                                ((current--))
-                                [ $current -lt 0 ] && current=$max
-                                ;;
-                            '[B')  # Down
-                                ((current++))
-                                [ $current -gt $max ] && current=0
-                                ;;
-                        esac
-                        if [ $prev -ne $current ]; then
-                            draw_level $prev
-                            draw_level $current
-                        fi
-                    fi
-                else
+            q|Q)
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
+                return 1
+                ;;
+            $'\x1b')
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
+                    # Just escape
                     show_cursor
                     exit_alt_screen
                     trap - EXIT
                     return 1
                 fi
+                case "$seq" in
+                    '[A')  # Up
+                        ((current--))
+                        [ $current -lt 0 ] && current=$max
+                        if [ $prev -ne $current ]; then
+                            draw_level $prev
+                            draw_level $current
+                        fi
+                        ;;
+                    '[B')  # Down
+                        ((current++))
+                        [ $current -gt $max ] && current=0
+                        if [ $prev -ne $current ]; then
+                            draw_level $prev
+                            draw_level $current
+                        fi
+                        ;;
+                esac
                 ;;
             "")  # Enter
                 local temp=$(mktemp)
@@ -566,30 +567,33 @@ configure_delegation_options() {
                 draw_option $current
                 ;;
             $'\x1b')  # Escape sequence
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape
                     show_cursor
                     exit_alt_screen
                     trap - EXIT
                     return
                 fi
-                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "${next_key}${third_key}" in
+                case "$seq" in
                     '[A')  # Up
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
+                        if [ $prev -ne $current ]; then
+                            draw_option $prev
+                            draw_option $current
+                        fi
                         ;;
                     '[B')  # Down
                         ((current++))
                         [ $current -ge $total ] && current=0
+                        if [ $prev -ne $current ]; then
+                            draw_option $prev
+                            draw_option $current
+                        fi
                         ;;
                 esac
-                if [ $prev -ne $current ]; then
-                    draw_option $prev
-                    draw_option $current
-                fi
                 ;;
         esac
     done
@@ -1008,8 +1012,8 @@ main_menu() {
                 esac
                 ;;
             $'\x1b')  # Escape sequence
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape - save and exit
                     goto_row $((ITEMS_ROW + total + 2))
                     clear_below
@@ -1021,23 +1025,25 @@ main_menu() {
                     trap - EXIT
                     exit 0
                 fi
-                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "${next_key}${third_key}" in
+                case "$seq" in
                     '[A')  # Up
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                     '[B')  # Down
                         ((current++))
                         [ $current -ge $total ] && current=0
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                 esac
-                if [ $prev -ne $current ]; then
-                    draw_item $prev
-                    draw_item $current
-                    draw_description
-                fi
                 ;;
         esac
     done

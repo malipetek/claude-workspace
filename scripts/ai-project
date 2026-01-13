@@ -25,7 +25,7 @@
 
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 REGISTRY="$HOME/.claude-workspace/registry.json"
-VERSION="1.4.0"
+VERSION="1.4.1"
 
 show_help() {
     cat << 'EOF'
@@ -452,34 +452,35 @@ menu_run_with_extras() {
                 return 0
                 ;;
             $'\x1b')
-                # Check if just escape or escape sequence
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                # Read remaining escape sequence bytes
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape, quit
                     MENU_RESULT=""
                     menu_show_cursor
                     menu_exit_alt_screen
                     trap - EXIT
                     return 1
-                else
-                    # Escape sequence, handle arrow keys
-                    read -rsn1 -t 0.1 third_key
-                    case "${next_key}${third_key}" in
-                        '[A')  # Up
-                            ((MENU_SELECTED--))
-                            [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
-                            menu_skip_separator "up"
-                            ;;
-                        '[B')  # Down
-                            ((MENU_SELECTED++))
-                            [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
-                            menu_skip_separator "down"
-                            ;;
-                    esac
-                    if [ $prev_selected -ne $MENU_SELECTED ]; then
-                        menu_redraw_changed $prev_selected $MENU_SELECTED
-                    fi
                 fi
+                # Handle arrow keys
+                case "$seq" in
+                    '[A')  # Up
+                        ((MENU_SELECTED--))
+                        [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
+                        menu_skip_separator "up"
+                        if [ $prev_selected -ne $MENU_SELECTED ]; then
+                            menu_redraw_changed $prev_selected $MENU_SELECTED
+                        fi
+                        ;;
+                    '[B')  # Down
+                        ((MENU_SELECTED++))
+                        [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
+                        menu_skip_separator "down"
+                        if [ $prev_selected -ne $MENU_SELECTED ]; then
+                            menu_redraw_changed $prev_selected $MENU_SELECTED
+                        fi
+                        ;;
+                esac
                 ;;
         esac
     done

@@ -424,8 +424,8 @@ interactive_multiselect() {
                 break
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape - cancel
                     SELECTED_INDICES=()
                     show_cursor
@@ -433,22 +433,25 @@ interactive_multiselect() {
                     trap - EXIT
                     return 1
                 fi
-                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "${next_key}${third_key}" in
+                case "$seq" in
                     '[A')  # Up arrow
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                     '[B')  # Down arrow
                         ((current++))
                         [ $current -ge $total ] && current=0
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                 esac
-                if [ $prev -ne $current ]; then
-                    draw_item $prev
-                    draw_item $current
-                fi
                 ;;
         esac
     done
@@ -615,8 +618,8 @@ interactive_folder_select() {
                 fi
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape - cancel
                     SELECTED_PATH=""
                     show_cursor
@@ -624,9 +627,7 @@ interactive_folder_select() {
                     trap - EXIT
                     return 1
                 fi
-                read -rsn1 -t 0.1 third_key
-                local prev=$current
-                case "${next_key}${third_key}" in
+                case "$seq" in
                     '[A')  # Up arrow
                         ((current--))
                         [ $current -lt 0 ] && current=$((total > 0 ? total - 1 : 0))
@@ -956,8 +957,8 @@ main_menu() {
                 esac
                 ;;
             $'\x1b')  # Escape sequence
-                read -rsn1 -t 0.1 next_key
-                if [ -z "$next_key" ]; then
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
                     # Just escape - quit
                     show_cursor
                     exit_alt_screen
@@ -967,22 +968,25 @@ main_menu() {
                     echo ""
                     exit 0
                 fi
-                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "${next_key}${third_key}" in
+                case "$seq" in
                     '[A')  # Up
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                     '[B')  # Down
                         ((current++))
                         [ $current -ge $total ] && current=0
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
                         ;;
                 esac
-                if [ $prev -ne $current ]; then
-                    draw_item $prev
-                    draw_item $current
-                fi
                 ;;
         esac
     done
