@@ -496,7 +496,7 @@ interactive_project_select() {
     draw_all
     
     while true; do
-        read -rsn1 key
+        IFS= read -rsn1 key
         
         local prev=$current
         

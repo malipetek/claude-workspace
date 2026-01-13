@@ -849,6 +849,7 @@ main_menu() {
                         if interactive_folder_select "SELECT DIRECTORY TO SCAN" "$HOME"; then
                             show_cursor
                             exit_alt_screen
+                            clear
                             scan_for_projects "$SELECTED_PATH"
                             enter_alt_screen
                             hide_cursor
@@ -861,6 +862,7 @@ main_menu() {
                         if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
                             show_cursor
                             exit_alt_screen
+                            clear
                             add_project_to_registry "$SELECTED_PATH"
                             read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
                             echo
@@ -880,6 +882,7 @@ main_menu() {
                         if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
                             show_cursor
                             exit_alt_screen
+                            clear
                             create_workspace_config "$SELECTED_PATH"
                             echo ""
                             read -p "Press Enter to continue..."

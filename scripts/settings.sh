@@ -223,7 +223,7 @@ delegation_slider() {
     draw_all_levels
 
     while true; do
-        read -rsn1 key
+        IFS= read -rsn1 key
         local prev=$current
 
         case "$key" in
@@ -379,7 +379,7 @@ configure_ai_tools() {
     draw_footer
 
     while true; do
-        read -rsn1 key
+        IFS= read -rsn1 key
 
         case "$key" in
             q|Q)
@@ -544,7 +544,7 @@ configure_delegation_options() {
     draw_all_options
 
     while true; do
-        read -rsn1 key
+        IFS= read -rsn1 key
 
         case "$key" in
             q|Q)
@@ -923,7 +923,7 @@ main_menu() {
     draw_description
 
     while true; do
-        read -rsn1 key
+        IFS= read -rsn1 key
 
         case "$key" in
             q|Q)
