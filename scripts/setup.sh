@@ -734,11 +734,36 @@ scan_for_projects() {
 
 # Main menu
 main_menu() {
-    enter_alt_screen
-    show_cursor  # Need cursor for prompts
-    trap 'exit_alt_screen' EXIT
+    # Menu items: id, label, description
+    local -a menu_ids=("scan" "add" "configure" "view" "settings" "ghostty" "quit")
+    local -a menu_labels=(
+        "Scan for projects"
+        "Add a specific project"
+        "Configure workspace"
+        "View registered projects"
+        "AI tools & delegation"
+        "Check Ghostty permissions"
+        "Quit"
+    )
+    local -a menu_descs=(
+        "Scan a directory for projects to add"
+        "Browse and add a specific project folder"
+        "Create/edit .claude-workspace.json for a project"
+        "List all registered projects"
+        "Configure AI delegation settings"
+        "Test Ghostty accessibility permissions"
+        "Exit setup wizard"
+    )
+    local total=${#menu_ids[@]}
+    local current=0
+    local ITEMS_ROW=8
 
-    draw_main_menu() {
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+
+    # Draw header
+    draw_header() {
         goto_row 1
         draw_header_once
         goto_row 5
@@ -746,124 +771,50 @@ main_menu() {
         echo -e "${BOLD}What would you like to do?${NC}"
         clear_line
         echo ""
-        clear_line
-        echo -e "  ${CYAN}[1]${NC} Scan for projects in a directory"
-        clear_line
-        echo -e "  ${CYAN}[2]${NC} Add a specific project"
-        clear_line
-        echo -e "  ${CYAN}[3]${NC} Configure workspace for existing project"
-        clear_line
-        echo -e "  ${CYAN}[4]${NC} View registered projects"
-        clear_line
-        echo -e "  ${CYAN}[5]${NC} AI tools & delegation settings"
-        clear_line
-        echo -e "  ${CYAN}[6]${NC} Check Ghostty permissions"
-        clear_line
-        echo -e "  ${CYAN}[q]${NC} Quit"
-        clear_line
-        echo ""
-        clear_below
+        echo -e "  ${DIM}↑/↓: Navigate   Enter: Select   q: Quit${NC}"
     }
 
-    draw_main_menu
+    # Draw single item
+    draw_item() {
+        local i=$1
+        local row=$((ITEMS_ROW + i))
+
+        goto_row $row
+        clear_line
+        if [ $i -eq $current ]; then
+            echo -e " ${GREEN}▶${NC} ${BOLD}${menu_labels[$i]}${NC}"
+        else
+            echo -e "   ${menu_labels[$i]}"
+        fi
+    }
+
+    # Draw all items
+    draw_all_items() {
+        for ((i=0; i<total; i++)); do
+            draw_item $i
+        done
+    }
+
+    # Draw description
+    draw_description() {
+        goto_row $((ITEMS_ROW + total + 1))
+        clear_line
+        echo ""
+        clear_line
+        echo -e "  ${DIM}${menu_descs[$current]}${NC}"
+    }
+
+    # Initial draw
+    draw_header
+    draw_all_items
+    draw_description
 
     while true; do
-        goto_row 18
-        clear_line
-        read -p "Choice: " -n 1 -r choice
-        echo ""
+        read -rsn1 key
 
-        case $choice in
-            1)
-                if interactive_folder_select "SELECT DIRECTORY TO SCAN" "$HOME"; then
-                    exit_alt_screen
-                    scan_for_projects "$SELECTED_PATH"
-                    enter_alt_screen
-                else
-                    goto_row 20
-                    clear_below
-                    echo -e "${YELLOW}Cancelled${NC}"
-                    read -p "Press Enter to continue..."
-                fi
-                draw_main_menu
-                ;;
-            2)
-                if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
-                    exit_alt_screen
-                    add_project_to_registry "$SELECTED_PATH"
-                    read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
-                    echo
-                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        create_workspace_config "$SELECTED_PATH"
-                    fi
-                    echo ""
-                    read -p "Press Enter to continue..."
-                    enter_alt_screen
-                else
-                    goto_row 20
-                    clear_below
-                    echo -e "${YELLOW}Cancelled${NC}"
-                    read -p "Press Enter to continue..."
-                fi
-                draw_main_menu
-                ;;
-            3)
-                if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
-                    exit_alt_screen
-                    create_workspace_config "$SELECTED_PATH"
-                    echo ""
-                    read -p "Press Enter to continue..."
-                    enter_alt_screen
-                else
-                    goto_row 20
-                    clear_below
-                    echo -e "${YELLOW}Cancelled${NC}"
-                    read -p "Press Enter to continue..."
-                fi
-                draw_main_menu
-                ;;
-            4)
-                goto_row 20
-                clear_below
-                echo -e "${BLUE}Registered Projects:${NC}"
-                echo ""
-                jq -r '.projects | to_entries[] | "  \(.key): \(.value.path)"' "$REGISTRY" 2>/dev/null || echo "  No projects registered"
-                echo ""
-                read -p "Press Enter to continue..."
-                draw_main_menu
-                ;;
-            5)
-                exit_alt_screen
-                "$INSTALL_DIR/scripts/settings.sh"
-                enter_alt_screen
-                draw_main_menu
-                ;;
-            6)
-                goto_row 20
-                clear_below
-                echo -e "${BLUE}Testing Ghostty Accessibility permissions...${NC}"
-                echo ""
-                if osascript -e 'tell application "System Events" to keystroke ""' 2>/dev/null; then
-                    echo -e "${GREEN}✓${NC} Accessibility permissions OK"
-                else
-                    echo -e "${RED}✗${NC} Accessibility permissions needed"
-                    echo ""
-                    echo "To fix:"
-                    echo "  1. Open System Settings → Privacy & Security → Accessibility"
-                    echo "  2. Add Ghostty and enable it"
-                    echo "  3. Restart Ghostty"
-                    echo ""
-                    read -p "Open System Settings? [Y/n] " -n 1 -r
-                    echo
-                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                    fi
-                fi
-                echo ""
-                read -p "Press Enter to continue..."
-                draw_main_menu
-                ;;
+        case "$key" in
             q|Q)
+                show_cursor
                 exit_alt_screen
                 trap - EXIT
                 echo ""
@@ -872,6 +823,139 @@ main_menu() {
                 echo -e "Run ${CYAN}claude-workspace${NC} to launch a project."
                 echo ""
                 exit 0
+                ;;
+            "")  # Enter - select current item
+                local selected_id="${menu_ids[$current]}"
+                case "$selected_id" in
+                    scan)
+                        if interactive_folder_select "SELECT DIRECTORY TO SCAN" "$HOME"; then
+                            show_cursor
+                            exit_alt_screen
+                            scan_for_projects "$SELECTED_PATH"
+                            enter_alt_screen
+                            hide_cursor
+                        fi
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    add)
+                        if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
+                            show_cursor
+                            exit_alt_screen
+                            add_project_to_registry "$SELECTED_PATH"
+                            read -p "Create .claude-workspace.json? [Y/n] " -n 1 -r
+                            echo
+                            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                                create_workspace_config "$SELECTED_PATH"
+                            fi
+                            echo ""
+                            read -p "Press Enter to continue..."
+                            enter_alt_screen
+                            hide_cursor
+                        fi
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    configure)
+                        if interactive_folder_select "SELECT PROJECT FOLDER" "$HOME"; then
+                            show_cursor
+                            exit_alt_screen
+                            create_workspace_config "$SELECTED_PATH"
+                            echo ""
+                            read -p "Press Enter to continue..."
+                            enter_alt_screen
+                            hide_cursor
+                        fi
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    view)
+                        show_cursor
+                        goto_row $((ITEMS_ROW + total + 4))
+                        clear_below
+                        echo -e "${BLUE}Registered Projects:${NC}"
+                        echo ""
+                        jq -r '.projects | to_entries[] | "  \(.key): \(.value.path)"' "$REGISTRY" 2>/dev/null || echo "  No projects registered"
+                        echo ""
+                        read -p "Press Enter to continue..."
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    settings)
+                        show_cursor
+                        exit_alt_screen
+                        "$INSTALL_DIR/scripts/settings.sh"
+                        enter_alt_screen
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    ghostty)
+                        show_cursor
+                        goto_row $((ITEMS_ROW + total + 4))
+                        clear_below
+                        echo -e "${BLUE}Testing Ghostty Accessibility permissions...${NC}"
+                        echo ""
+                        if osascript -e 'tell application "System Events" to keystroke ""' 2>/dev/null; then
+                            echo -e "${GREEN}✓${NC} Accessibility permissions OK"
+                        else
+                            echo -e "${RED}✗${NC} Accessibility permissions needed"
+                            echo ""
+                            echo "To fix:"
+                            echo "  1. Open System Settings → Privacy & Security → Accessibility"
+                            echo "  2. Add Ghostty and enable it"
+                            echo "  3. Restart Ghostty"
+                            echo ""
+                            read -p "Open System Settings? [Y/n] " -n 1 -r
+                            echo
+                            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                                open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                            fi
+                        fi
+                        echo ""
+                        read -p "Press Enter to continue..."
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    quit)
+                        show_cursor
+                        exit_alt_screen
+                        trap - EXIT
+                        echo ""
+                        echo -e "${GREEN}Setup complete!${NC}"
+                        echo ""
+                        echo -e "Run ${CYAN}claude-workspace${NC} to launch a project."
+                        echo ""
+                        exit 0
+                        ;;
+                esac
+                ;;
+            $'\x1b')  # Escape sequence
+                read -rsn2 -t 1 seq
+                local prev=$current
+                case "$seq" in
+                    '[A')  # Up
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total - 1))
+                        ;;
+                    '[B')  # Down
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        ;;
+                esac
+                if [ $prev -ne $current ]; then
+                    draw_item $prev
+                    draw_item $current
+                    draw_description
+                fi
                 ;;
         esac
     done

@@ -476,119 +476,172 @@ add_custom_tool() {
 
 # Configure delegation behavior
 configure_delegation_options() {
+    local current=0
+    local total=2
+    local OPTION_ROWS=(9 25)  # Row numbers for each option box
+
     enter_alt_screen
-    trap 'exit_alt_screen' EXIT
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
 
-    draw_delegation_options() {
-        local visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
-        local branches=$(jq -r '.delegation.use_branches // true' "$SETTINGS_FILE")
+    # Get current values
+    get_values() {
+        visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
+        branches=$(jq -r '.delegation.use_branches // true' "$SETTINGS_FILE")
+    }
 
-        local visible_status="${RED}Off${NC}"
-        local branches_status="${RED}Off${NC}"
-        [ "$visible" = "true" ] && visible_status="${GREEN}On${NC}"
-        [ "$branches" = "true" ] && branches_status="${GREEN}On${NC}"
-
+    # Draw static header
+    draw_static() {
         goto_row 1
         draw_header_once
         goto_row 5
         echo -e "${BOLD}Delegation Behavior${NC}"
         echo -e "${DIM}Configure how Claude delegates tasks to other AI tools${NC}"
         echo ""
-
-        clear_line
-        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC} ${BOLD}[1] Visible Delegation${NC}                                        [$visible_status]"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     When enabled, delegated tasks open in a Ghostty split pane so you"
-        clear_line
-        echo -e "${CYAN}│${NC}     can watch the AI work in real-time. Useful for:"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Debugging delegation issues"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Learning how other AIs approach problems"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Monitoring progress on complex tasks"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${DIM}Layout: Claude on left, delegated AI on right${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --visible${NC}"
-        clear_line
-        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
-        clear_line
-        echo ""
-        clear_line
-        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC} ${BOLD}[2] Branch Isolation${NC}                                          [$branches_status]"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     When enabled, each delegated task runs on its own git branch."
-        clear_line
-        echo -e "${CYAN}│${NC}     This prevents multiple AI agents from conflicting. Benefits:"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} No conflicts when running parallel delegations"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Easy to review changes before merging"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Safe to discard failed attempts"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Clear git history of who did what"
-        clear_line
-        echo -e "${CYAN}│${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${DIM}Branch format: delegate/<ai>/<task-summary>-<timestamp>${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${DIM}Example: delegate/gemini/write-unit-tests-20250113_143022${NC}"
-        clear_line
-        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --branch or --no-branch${NC}"
-        clear_line
-        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
-        clear_line
-        echo ""
-        clear_line
-        echo -e "  ${CYAN}[q]${NC} Back to main menu"
-        clear_line
-        echo ""
+        echo -e "  ${DIM}↑/↓: Navigate   Space: Toggle   Enter/q: Done${NC}"
     }
 
-    draw_delegation_options
+    # Draw option box
+    draw_option() {
+        local idx=$1
+        local row=${OPTION_ROWS[$idx]}
+        local is_selected=$((idx == current))
+
+        get_values
+
+        goto_row $row
+
+        if [ $idx -eq 0 ]; then
+            # Visible Delegation
+            local status="${RED}Off${NC}"
+            [ "$visible" = "true" ] && status="${GREEN}On${NC}"
+
+            local border_color="${CYAN}"
+            local indicator="  "
+            if [ $is_selected -eq 1 ]; then
+                border_color="${GREEN}"
+                indicator="${GREEN}▶${NC} "
+            fi
+
+            clear_line
+            echo -e "${indicator}${border_color}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC} ${BOLD}Visible Delegation${NC}                                            [$status]"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     When enabled, delegated tasks open in a Ghostty split pane so you"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     can watch the AI work in real-time. Useful for:"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Debugging delegation issues"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Learning how other AIs approach problems"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Monitoring progress on complex tasks"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${DIM}Layout: Claude on left, delegated AI on right${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${DIM}Override per-task: delegate.sh ... --visible${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
+        else
+            # Branch Isolation
+            local status="${RED}Off${NC}"
+            [ "$branches" = "true" ] && status="${GREEN}On${NC}"
+
+            local border_color="${CYAN}"
+            local indicator="  "
+            if [ $is_selected -eq 1 ]; then
+                border_color="${GREEN}"
+                indicator="${GREEN}▶${NC} "
+            fi
+
+            clear_line
+            echo -e "${indicator}${border_color}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC} ${BOLD}Branch Isolation${NC}                                              [$status]"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     When enabled, each delegated task runs on its own git branch."
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     This prevents multiple AI agents from conflicting. Benefits:"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} No conflicts when running parallel delegations"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Easy to review changes before merging"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Safe to discard failed attempts"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${GREEN}✓${NC} Clear git history of who did what"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${DIM}Branch format: delegate/<ai>/<task-summary>-<timestamp>${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${DIM}Example: delegate/gemini/write-unit-tests-20250113_143022${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}│${NC}     ${DIM}Override per-task: delegate.sh ... --branch or --no-branch${NC}"
+            clear_line
+            echo -e "${indicator}${border_color}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
+        fi
+    }
+
+    # Initial draw
+    draw_static
+    draw_option 0
+    draw_option 1
 
     while true; do
-        read -rsn1 choice
+        read -rsn1 key
 
-        case $choice in
-            1)
-                local visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
-                local new_val="true"
-                [ "$visible" = "true" ] && new_val="false"
-                local temp=$(mktemp)
-                jq ".delegation.visible_by_default = $new_val" "$SETTINGS_FILE" > "$temp"
-                mv "$temp" "$SETTINGS_FILE"
-                draw_delegation_options
-                ;;
-            2)
-                local branches=$(jq -r '.delegation.use_branches // true' "$SETTINGS_FILE")
-                local new_val="true"
-                [ "$branches" = "true" ] && new_val="false"
-                local temp=$(mktemp)
-                jq ".delegation.use_branches = $new_val" "$SETTINGS_FILE" > "$temp"
-                mv "$temp" "$SETTINGS_FILE"
-                draw_delegation_options
-                ;;
-            q|Q)
+        case "$key" in
+            q|Q|"")  # q or Enter - go back
+                show_cursor
                 exit_alt_screen
                 trap - EXIT
                 return
+                ;;
+            " ")  # Space - toggle current option
+                if [ $current -eq 0 ]; then
+                    local new_val="true"
+                    [ "$visible" = "true" ] && new_val="false"
+                    local temp=$(mktemp)
+                    jq ".delegation.visible_by_default = $new_val" "$SETTINGS_FILE" > "$temp"
+                    mv "$temp" "$SETTINGS_FILE"
+                else
+                    local new_val="true"
+                    [ "$branches" = "true" ] && new_val="false"
+                    local temp=$(mktemp)
+                    jq ".delegation.use_branches = $new_val" "$SETTINGS_FILE" > "$temp"
+                    mv "$temp" "$SETTINGS_FILE"
+                fi
+                draw_option $current
+                ;;
+            $'\x1b')  # Escape sequence
+                read -rsn2 -t 1 seq
+                local prev=$current
+                case "$seq" in
+                    '[A')  # Up
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total - 1))
+                        ;;
+                    '[B')  # Down
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        ;;
+                esac
+                if [ $prev -ne $current ]; then
+                    draw_option $prev
+                    draw_option $current
+                fi
                 ;;
         esac
     done
@@ -834,11 +887,38 @@ show_settings() {
 
 # Main settings menu
 main_menu() {
-    enter_alt_screen
-    show_cursor  # Need cursor for input prompts
-    trap 'exit_alt_screen' EXIT
+    # Menu items: id, label, description
+    local -a menu_ids=("delegation" "tools" "custom" "behavior" "apply" "show" "reset" "done")
+    local -a menu_labels=(
+        "Adjust delegation level"
+        "Configure AI tools"
+        "Add custom AI tool"
+        "Delegation behavior"
+        "Apply settings"
+        "Show current settings"
+        "Reset to defaults"
+        "Done & Save"
+    )
+    local -a menu_descs=(
+        "Set how much Claude delegates to other AI tools"
+        "Enable/disable specific AI tools for delegation"
+        "Add a custom AI tool command"
+        "Configure visibility and branch isolation"
+        "Update CLAUDE.md with current settings"
+        "Display all current configuration"
+        "Reset all settings to defaults"
+        "Save settings and exit"
+    )
+    local total=${#menu_ids[@]}
+    local current=0
+    local ITEMS_ROW=10
 
-    draw_main_menu() {
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+
+    # Draw static header with current config
+    draw_header() {
         local level=$(get_delegation_level)
         local level_name=$(get_delegation_name)
         local enabled_count=$(jq '[.ai_tools[] | select(.enabled == true)] | length' "$SETTINGS_FILE")
@@ -854,96 +934,160 @@ main_menu() {
         echo -e "  AI Tools: $enabled_count enabled"
         clear_line
         echo ""
-        clear_line
-        echo -e "${BOLD}Options:${NC}"
-        clear_line
-        echo ""
-        clear_line
-        echo -e "  ${CYAN}[1]${NC} Adjust delegation level"
-        clear_line
-        echo -e "  ${CYAN}[2]${NC} Configure AI tools"
-        clear_line
-        echo -e "  ${CYAN}[3]${NC} Add custom AI tool"
-        clear_line
-        echo -e "  ${CYAN}[4]${NC} Delegation behavior (visibility, branches)"
-        clear_line
-        echo -e "  ${CYAN}[5]${NC} Apply settings (update CLAUDE.md)"
-        clear_line
-        echo -e "  ${CYAN}[6]${NC} Show current settings"
-        clear_line
-        echo -e "  ${CYAN}[r]${NC} Reset to defaults"
-        clear_line
-        echo -e "  ${CYAN}[q]${NC} Done"
-        clear_line
-        echo ""
-        clear_below
+        echo -e "  ${DIM}↑/↓: Navigate   Enter: Select   q: Done${NC}"
     }
 
-    draw_main_menu
+    # Draw a single menu item
+    draw_item() {
+        local i=$1
+        local row=$((ITEMS_ROW + i))
+
+        goto_row $row
+        clear_line
+        if [ $i -eq $current ]; then
+            echo -e " ${GREEN}▶${NC} ${BOLD}${menu_labels[$i]}${NC}"
+        else
+            echo -e "   ${menu_labels[$i]}"
+        fi
+    }
+
+    # Draw all items
+    draw_all_items() {
+        for ((i=0; i<total; i++)); do
+            draw_item $i
+        done
+    }
+
+    # Draw description for current item
+    draw_description() {
+        goto_row $((ITEMS_ROW + total + 1))
+        clear_line
+        echo ""
+        clear_line
+        echo -e "  ${DIM}${menu_descs[$current]}${NC}"
+    }
+
+    # Initial draw
+    draw_header
+    draw_all_items
+    draw_description
 
     while true; do
-        goto_row 24
-        clear_line
-        read -p "Choice: " -n 1 -r choice
-        echo ""
+        read -rsn1 key
 
-        case $choice in
-            1)
-                delegation_slider
-                draw_main_menu
-                ;;
-            2)
-                configure_ai_tools
-                draw_main_menu
-                ;;
-            3)
-                exit_alt_screen
-                add_custom_tool
-                enter_alt_screen
-                draw_main_menu
-                ;;
-            4)
-                configure_delegation_options
-                draw_main_menu
-                ;;
-            5)
-                goto_row 26
-                clear_below
-                generate_claude_md
-                echo ""
-                read -p "Press Enter to continue..."
-                draw_main_menu
-                ;;
-            6)
-                exit_alt_screen
-                show_settings
-                read -p "Press Enter to continue..."
-                enter_alt_screen
-                draw_main_menu
-                ;;
-            r|R)
-                goto_row 26
-                clear_below
-                read -p "Reset all settings to defaults? [y/N] " -n 1 -r
-                echo
-                if [[ $REPLY =~ ^[Yy]$ ]]; then
-                    echo "$DEFAULT_SETTINGS" | jq '.' > "$SETTINGS_FILE"
-                    detect_installed_tools
-                    echo -e "${GREEN}✓${NC} Settings reset"
-                fi
-                read -p "Press Enter to continue..."
-                draw_main_menu
-                ;;
+        case "$key" in
             q|Q)
-                # Apply settings on exit
-                goto_row 26
+                # Save and exit
+                goto_row $((ITEMS_ROW + total + 4))
                 clear_below
                 generate_claude_md
                 echo ""
                 echo -e "${GREEN}Settings saved!${NC}"
+                show_cursor
                 exit_alt_screen
                 trap - EXIT
                 exit 0
+                ;;
+            "")  # Enter - select current item
+                local selected_id="${menu_ids[$current]}"
+                case "$selected_id" in
+                    delegation)
+                        delegation_slider
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    tools)
+                        configure_ai_tools
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    custom)
+                        show_cursor
+                        exit_alt_screen
+                        add_custom_tool
+                        enter_alt_screen
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    behavior)
+                        configure_delegation_options
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    apply)
+                        goto_row $((ITEMS_ROW + total + 4))
+                        clear_below
+                        generate_claude_md
+                        sleep 1
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    show)
+                        show_cursor
+                        exit_alt_screen
+                        show_settings
+                        read -p "Press Enter to continue..."
+                        enter_alt_screen
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    reset)
+                        show_cursor
+                        goto_row $((ITEMS_ROW + total + 4))
+                        clear_below
+                        read -p "Reset all settings to defaults? [y/N] " -n 1 -r
+                        echo
+                        if [[ $REPLY =~ ^[Yy]$ ]]; then
+                            echo "$DEFAULT_SETTINGS" | jq '.' > "$SETTINGS_FILE"
+                            detect_installed_tools
+                            echo -e "${GREEN}✓${NC} Settings reset"
+                            sleep 1
+                        fi
+                        hide_cursor
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
+                    done)
+                        # Save and exit
+                        goto_row $((ITEMS_ROW + total + 4))
+                        clear_below
+                        generate_claude_md
+                        echo ""
+                        echo -e "${GREEN}Settings saved!${NC}"
+                        show_cursor
+                        exit_alt_screen
+                        trap - EXIT
+                        exit 0
+                        ;;
+                esac
+                ;;
+            $'\x1b')  # Escape sequence
+                read -rsn2 -t 1 seq
+                local prev=$current
+                case "$seq" in
+                    '[A')  # Up
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total - 1))
+                        ;;
+                    '[B')  # Down
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        ;;
+                esac
+                if [ $prev -ne $current ]; then
+                    draw_item $prev
+                    draw_item $current
+                    draw_description
+                fi
                 ;;
         esac
     done
