@@ -23,7 +23,7 @@
 #
 #══════════════════════════════════════════════════════════════════════════════
 
-SCRIPT_DIR="$HOME/.claude-workspace/scripts"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REGISTRY="$HOME/.claude-workspace/registry.json"
 VERSION="1.4.2"
 
