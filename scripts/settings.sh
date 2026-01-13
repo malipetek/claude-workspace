@@ -17,7 +17,10 @@ INSTALL_DIR="$HOME/.claude-workspace"
 SETTINGS_FILE="$INSTALL_DIR/settings.json"
 CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 
-# Colors
+# Source the menu library for flicker-free menus
+source "$INSTALL_DIR/scripts/lib/menu.sh"
+
+# Colors (also defined in menu.sh but kept for backward compatibility)
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -26,6 +29,35 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
+
+# Cursor positioning functions
+goto_row() {
+    printf '\033[%d;1H' "$1"
+}
+
+clear_line() {
+    printf '\033[K'
+}
+
+clear_below() {
+    printf '\033[J'
+}
+
+hide_cursor() {
+    printf '\033[?25l'
+}
+
+show_cursor() {
+    printf '\033[?25h'
+}
+
+enter_alt_screen() {
+    tput smcup 2>/dev/null || printf '\033[?1049h'
+}
+
+exit_alt_screen() {
+    tput rmcup 2>/dev/null || printf '\033[?1049l'
+}
 
 # Default settings
 DEFAULT_SETTINGS='{
@@ -100,9 +132,23 @@ get_delegation_name() {
     jq -r ".delegation.levels[\"$level\"].name" "$SETTINGS_FILE"
 }
 
-# Show header
+# Show header - draws at current position or row 1
 show_header() {
-    clear
+    local start_row=${1:-1}
+    goto_row $start_row
+    clear_line
+    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    clear_line
+    echo -e "${CYAN}║${NC}  ${GREEN}CLAUDE WORKSPACE SETTINGS${NC}                                                  ${CYAN}║${NC}"
+    clear_line
+    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+    clear_line
+    echo ""
+}
+
+# Draw header once (for alt screen)
+draw_header_once() {
+    goto_row 1
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${NC}  ${GREEN}CLAUDE WORKSPACE SETTINGS${NC}                                                  ${CYAN}║${NC}"
     echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
@@ -113,18 +159,33 @@ show_header() {
 delegation_slider() {
     local current=$(get_delegation_level)
     local max=4
+    local SLIDER_ROW=8   # Row where slider is drawn
+    local LEVELS_ROW=15  # Row where levels list starts
 
-    # Hide cursor
-    tput civis
-    trap 'tput cnorm' EXIT
+    # Pre-load level data to avoid jq calls during draw
+    local names=() descs=()
+    for ((i=0; i<=max; i++)); do
+        names[$i]=$(jq -r ".delegation.levels[\"$i\"].name" "$SETTINGS_FILE")
+        descs[$i]=$(jq -r ".delegation.levels[\"$i\"].description" "$SETTINGS_FILE")
+    done
 
-    draw_slider() {
-        show_header
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+
+    # Draw static elements once
+    draw_static() {
+        draw_header_once
+        goto_row 5
         echo -e "${BOLD}Delegation Strategy${NC}"
         echo -e "${DIM}How much should Claude delegate to external AI tools?${NC}"
         echo ""
+    }
 
-        # Draw slider
+    # Draw just the slider bar
+    draw_slider_bar() {
+        goto_row $SLIDER_ROW
+        clear_line
         echo -n "  "
         for ((i=0; i<=max; i++)); do
             if [ $i -eq $current ]; then
@@ -136,42 +197,56 @@ delegation_slider() {
         done
         echo ""
 
-        # Labels
+        goto_row $((SLIDER_ROW + 1))
+        clear_line
         echo -e "  ${DIM}Off${NC}                           ${DIM}Max${NC}"
-        echo ""
 
-        # Current level info
-        local name=$(jq -r ".delegation.levels[\"$current\"].name" "$SETTINGS_FILE")
-        local desc=$(jq -r ".delegation.levels[\"$current\"].description" "$SETTINGS_FILE")
+        goto_row $((SLIDER_ROW + 3))
+        clear_line
+        echo -e "  ${BOLD}Level $current: ${names[$current]}${NC}"
+        goto_row $((SLIDER_ROW + 4))
+        clear_line
+        echo -e "  ${DIM}${descs[$current]}${NC}"
+    }
 
-        echo -e "  ${BOLD}Level $current: $name${NC}"
-        echo -e "  ${DIM}$desc${NC}"
-        echo ""
-
-        # Level descriptions
+    # Draw levels list
+    draw_levels() {
+        goto_row $LEVELS_ROW
+        clear_line
         echo -e "${BLUE}Levels:${NC}"
         for ((i=0; i<=max; i++)); do
-            local lname=$(jq -r ".delegation.levels[\"$i\"].name" "$SETTINGS_FILE")
-            local ldesc=$(jq -r ".delegation.levels[\"$i\"].description" "$SETTINGS_FILE")
+            goto_row $((LEVELS_ROW + 1 + i * 2))
+            clear_line
             if [ $i -eq $current ]; then
-                echo -e "  ${GREEN}▶ [$i] $lname${NC}"
-                echo -e "    ${DIM}$ldesc${NC}"
+                echo -e "  ${GREEN}▶ [$i] ${names[$i]}${NC}"
             else
-                echo -e "  ${DIM}  [$i] $lname${NC}"
+                echo -e "  ${DIM}  [$i] ${names[$i]}${NC}"
+            fi
+            goto_row $((LEVELS_ROW + 2 + i * 2))
+            clear_line
+            if [ $i -eq $current ]; then
+                echo -e "    ${DIM}${descs[$i]}${NC}"
             fi
         done
 
-        echo ""
+        goto_row $((LEVELS_ROW + 12))
+        clear_line
         echo -e "  ${DIM}←/→: Adjust   Enter: Confirm   q: Cancel${NC}"
     }
 
-    draw_slider
+    # Initial draw
+    draw_static
+    draw_slider_bar
+    draw_levels
 
     while true; do
         read -rsn1 key
 
         case "$key" in
             q|Q)
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
                 return 1
                 ;;
             "")  # Enter
@@ -179,6 +254,9 @@ delegation_slider() {
                 local temp=$(mktemp)
                 jq ".delegation.level = $current" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
                 return 0
                 ;;
             $'\x1b')
@@ -187,18 +265,21 @@ delegation_slider() {
                     '[D')  # Left
                         ((current--))
                         [ $current -lt 0 ] && current=0
-                        draw_slider
+                        draw_slider_bar
+                        draw_levels
                         ;;
                     '[C')  # Right
                         ((current++))
                         [ $current -gt $max ] && current=$max
-                        draw_slider
+                        draw_slider_bar
+                        draw_levels
                         ;;
                 esac
                 ;;
             [0-4])  # Direct number input
                 current=$key
-                draw_slider
+                draw_slider_bar
+                draw_levels
                 ;;
         esac
     done
@@ -210,64 +291,104 @@ configure_ai_tools() {
     local tools=($(jq -r '.ai_tools | keys[]' "$SETTINGS_FILE"))
     local total=${#tools[@]}
     local current=0
+    local ITEMS_ROW=9  # Row where items start
 
-    # Hide cursor
-    tput civis
-    trap 'tput cnorm' EXIT
+    # Pre-load tool data
+    local tool_names=() tool_cmds=() tool_enabled=() tool_installed=()
+    reload_tool_data() {
+        for ((i=0; i<total; i++)); do
+            local tool="${tools[$i]}"
+            tool_names[$i]=$(jq -r ".ai_tools.$tool.name" "$SETTINGS_FILE")
+            tool_cmds[$i]=$(jq -r ".ai_tools.$tool.command" "$SETTINGS_FILE")
+            tool_enabled[$i]=$(jq -r ".ai_tools.$tool.enabled" "$SETTINGS_FILE")
+            tool_installed[$i]=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
+        done
+    }
+    reload_tool_data
 
-    draw_tools_menu() {
-        show_header
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+
+    # Draw static header
+    draw_static() {
+        draw_header_once
+        goto_row 5
         echo -e "${BOLD}External AI Tools${NC}"
         echo -e "${DIM}Configure which AI tools Claude can delegate to${NC}"
         echo ""
         echo -e "  ${DIM}↑/↓: Navigate   Space: Toggle   Enter: Done   a: Auto-detect${NC}"
-        echo ""
+    }
 
+    # Draw a single tool item
+    draw_tool_item() {
+        local i=$1
+        local row=$((ITEMS_ROW + i * 2))
+
+        local checkbox="[ ]"
+        local status=""
+
+        if [ "${tool_enabled[$i]}" = "true" ]; then
+            checkbox="${GREEN}[✓]${NC}"
+        fi
+
+        if [ "${tool_installed[$i]}" = "true" ]; then
+            status="${GREEN}(installed)${NC}"
+        else
+            status="${YELLOW}(not found)${NC}"
+        fi
+
+        goto_row $row
+        clear_line
+        if [ $i -eq $current ]; then
+            echo -e "  ${BOLD}▶ $checkbox ${tool_names[$i]}${NC} $status"
+            goto_row $((row + 1))
+            clear_line
+            echo -e "    ${DIM}Command: ${tool_cmds[$i]}${NC}"
+        else
+            echo -e "    $checkbox ${tool_names[$i]} $status"
+            goto_row $((row + 1))
+            clear_line
+        fi
+    }
+
+    # Draw all tools
+    draw_all_tools() {
         for ((i=0; i<total; i++)); do
-            local tool="${tools[$i]}"
-            local name=$(jq -r ".ai_tools.$tool.name" "$SETTINGS_FILE")
-            local cmd=$(jq -r ".ai_tools.$tool.command" "$SETTINGS_FILE")
-            local enabled=$(jq -r ".ai_tools.$tool.enabled" "$SETTINGS_FILE")
-            local installed=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
-
-            local checkbox="[ ]"
-            local status=""
-
-            if [ "$enabled" = "true" ]; then
-                checkbox="${GREEN}[✓]${NC}"
-            fi
-
-            if [ "$installed" = "true" ]; then
-                status="${GREEN}(installed)${NC}"
-            else
-                status="${YELLOW}(not found)${NC}"
-            fi
-
-            if [ $i -eq $current ]; then
-                echo -e "  ${BOLD}▶ $checkbox $name${NC} $status"
-                echo -e "    ${DIM}Command: $cmd${NC}"
-            else
-                echo -e "    $checkbox $name $status"
-            fi
+            draw_tool_item $i
         done
+    }
 
-        echo ""
-
-        # Show enabled count
-        local enabled_count=$(jq '[.ai_tools[] | select(.enabled == true)] | length' "$SETTINGS_FILE")
+    # Draw footer with count
+    draw_footer() {
+        local enabled_count=0
+        for ((i=0; i<total; i++)); do
+            [ "${tool_enabled[$i]}" = "true" ] && ((enabled_count++))
+        done
+        goto_row $((ITEMS_ROW + total * 2 + 1))
+        clear_line
         echo -e "  ${BLUE}Enabled: $enabled_count / $total${NC}"
     }
 
-    draw_tools_menu
+    # Initial draw
+    draw_static
+    draw_all_tools
+    draw_footer
 
     while true; do
         read -rsn1 key
 
         case "$key" in
             q|Q)
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
                 return 1
                 ;;
             "")  # Enter
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
                 return 0
                 ;;
             a|A)  # Auto-detect
@@ -281,33 +402,39 @@ configure_ai_tools() {
                         mv "$temp" "$SETTINGS_FILE"
                     fi
                 done
-                draw_tools_menu
+                reload_tool_data
+                draw_all_tools
+                draw_footer
                 ;;
             " ")  # Space - toggle
                 local tool="${tools[$current]}"
-                local enabled=$(jq -r ".ai_tools.$tool.enabled" "$SETTINGS_FILE")
                 local new_val="true"
-                [ "$enabled" = "true" ] && new_val="false"
+                [ "${tool_enabled[$current]}" = "true" ] && new_val="false"
 
                 local temp=$(mktemp)
                 jq ".ai_tools.$tool.enabled = $new_val" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
-                draw_tools_menu
+                tool_enabled[$current]=$new_val
+                draw_tool_item $current
+                draw_footer
                 ;;
             $'\x1b')
                 read -rsn2 -t 1 key
+                local prev=$current
                 case "$key" in
                     '[A')  # Up
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
-                        draw_tools_menu
                         ;;
                     '[B')  # Down
                         ((current++))
                         [ $current -ge $total ] && current=0
-                        draw_tools_menu
                         ;;
                 esac
+                if [ $prev -ne $current ]; then
+                    draw_tool_item $prev
+                    draw_tool_item $current
+                fi
                 ;;
         esac
     done
@@ -349,12 +476,10 @@ add_custom_tool() {
 
 # Configure delegation behavior
 configure_delegation_options() {
-    while true; do
-        show_header
-        echo -e "${BOLD}Delegation Behavior${NC}"
-        echo -e "${DIM}Configure how Claude delegates tasks to other AI tools${NC}"
-        echo ""
+    enter_alt_screen
+    trap 'exit_alt_screen' EXIT
 
+    draw_delegation_options() {
         local visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
         local branches=$(jq -r '.delegation.use_branches // true' "$SETTINGS_FILE")
 
@@ -363,73 +488,106 @@ configure_delegation_options() {
         [ "$visible" = "true" ] && visible_status="${GREEN}On${NC}"
         [ "$branches" = "true" ] && branches_status="${GREEN}On${NC}"
 
-        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
-        echo -e "${CYAN}│${NC} ${BOLD}[1] Visible Delegation${NC}                                        [$visible_status]"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     When enabled, delegated tasks open in a Ghostty split pane so you"
-        echo -e "${CYAN}│${NC}     can watch the AI work in real-time. Useful for:"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Debugging delegation issues"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Learning how other AIs approach problems"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Monitoring progress on complex tasks"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     ${DIM}Layout: Claude on left, delegated AI on right${NC}"
-        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --visible${NC}"
-        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
-        echo ""
-        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
-        echo -e "${CYAN}│${NC} ${BOLD}[2] Branch Isolation${NC}                                          [$branches_status]"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     When enabled, each delegated task runs on its own git branch."
-        echo -e "${CYAN}│${NC}     This prevents multiple AI agents from conflicting. Benefits:"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} No conflicts when running parallel delegations"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Easy to review changes before merging"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Safe to discard failed attempts"
-        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Clear git history of who did what"
-        echo -e "${CYAN}│${NC}"
-        echo -e "${CYAN}│${NC}     ${DIM}Branch format: delegate/<ai>/<task-summary>-<timestamp>${NC}"
-        echo -e "${CYAN}│${NC}     ${DIM}Example: delegate/gemini/write-unit-tests-20250113_143022${NC}"
-        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --branch or --no-branch${NC}"
-        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
-        echo ""
-        echo -e "  ${CYAN}[q]${NC} Back to main menu"
+        goto_row 1
+        draw_header_once
+        goto_row 5
+        echo -e "${BOLD}Delegation Behavior${NC}"
+        echo -e "${DIM}Configure how Claude delegates tasks to other AI tools${NC}"
         echo ""
 
-        read -p "Toggle option (1/2) or q to go back: " -n 1 -r choice
+        clear_line
+        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC} ${BOLD}[1] Visible Delegation${NC}                                        [$visible_status]"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     When enabled, delegated tasks open in a Ghostty split pane so you"
+        clear_line
+        echo -e "${CYAN}│${NC}     can watch the AI work in real-time. Useful for:"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Debugging delegation issues"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Learning how other AIs approach problems"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Monitoring progress on complex tasks"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${DIM}Layout: Claude on left, delegated AI on right${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --visible${NC}"
+        clear_line
+        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
+        clear_line
         echo ""
+        clear_line
+        echo -e "${CYAN}┌─────────────────────────────────────────────────────────────────────────────┐${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC} ${BOLD}[2] Branch Isolation${NC}                                          [$branches_status]"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     When enabled, each delegated task runs on its own git branch."
+        clear_line
+        echo -e "${CYAN}│${NC}     This prevents multiple AI agents from conflicting. Benefits:"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} No conflicts when running parallel delegations"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Easy to review changes before merging"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Safe to discard failed attempts"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${GREEN}✓${NC} Clear git history of who did what"
+        clear_line
+        echo -e "${CYAN}│${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${DIM}Branch format: delegate/<ai>/<task-summary>-<timestamp>${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${DIM}Example: delegate/gemini/write-unit-tests-20250113_143022${NC}"
+        clear_line
+        echo -e "${CYAN}│${NC}     ${DIM}Override per-task: delegate.sh ... --branch or --no-branch${NC}"
+        clear_line
+        echo -e "${CYAN}└─────────────────────────────────────────────────────────────────────────────┘${NC}"
+        clear_line
+        echo ""
+        clear_line
+        echo -e "  ${CYAN}[q]${NC} Back to main menu"
+        clear_line
+        echo ""
+    }
+
+    draw_delegation_options
+
+    while true; do
+        read -rsn1 choice
 
         case $choice in
             1)
+                local visible=$(jq -r '.delegation.visible_by_default // false' "$SETTINGS_FILE")
                 local new_val="true"
                 [ "$visible" = "true" ] && new_val="false"
                 local temp=$(mktemp)
                 jq ".delegation.visible_by_default = $new_val" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
-                echo ""
-                if [ "$new_val" = "true" ]; then
-                    echo -e "${GREEN}✓${NC} Visible delegation enabled - tasks will open in split panes"
-                else
-                    echo -e "${YELLOW}✓${NC} Visible delegation disabled - tasks run in background"
-                fi
-                sleep 1
+                draw_delegation_options
                 ;;
             2)
+                local branches=$(jq -r '.delegation.use_branches // true' "$SETTINGS_FILE")
                 local new_val="true"
                 [ "$branches" = "true" ] && new_val="false"
                 local temp=$(mktemp)
                 jq ".delegation.use_branches = $new_val" "$SETTINGS_FILE" > "$temp"
                 mv "$temp" "$SETTINGS_FILE"
-                echo ""
-                if [ "$new_val" = "true" ]; then
-                    echo -e "${GREEN}✓${NC} Branch isolation enabled - each task gets its own branch"
-                else
-                    echo -e "${YELLOW}✓${NC} Branch isolation disabled - tasks work on current branch"
-                    echo -e "${YELLOW}  Warning: Parallel delegations may conflict!${NC}"
-                fi
-                sleep 1
+                draw_delegation_options
                 ;;
             q|Q)
+                exit_alt_screen
+                trap - EXIT
                 return
                 ;;
         esac
@@ -676,56 +834,96 @@ show_settings() {
 
 # Main settings menu
 main_menu() {
-    while true; do
-        show_header
+    enter_alt_screen
+    show_cursor  # Need cursor for input prompts
+    trap 'exit_alt_screen' EXIT
 
+    draw_main_menu() {
         local level=$(get_delegation_level)
         local level_name=$(get_delegation_name)
         local enabled_count=$(jq '[.ai_tools[] | select(.enabled == true)] | length' "$SETTINGS_FILE")
 
+        goto_row 1
+        draw_header_once
+        goto_row 5
+        clear_line
         echo -e "${BOLD}Current Configuration:${NC}"
+        clear_line
         echo -e "  Delegation: Level $level ($level_name)"
+        clear_line
         echo -e "  AI Tools: $enabled_count enabled"
+        clear_line
         echo ""
-
+        clear_line
         echo -e "${BOLD}Options:${NC}"
+        clear_line
         echo ""
+        clear_line
         echo -e "  ${CYAN}[1]${NC} Adjust delegation level"
+        clear_line
         echo -e "  ${CYAN}[2]${NC} Configure AI tools"
+        clear_line
         echo -e "  ${CYAN}[3]${NC} Add custom AI tool"
+        clear_line
         echo -e "  ${CYAN}[4]${NC} Delegation behavior (visibility, branches)"
+        clear_line
         echo -e "  ${CYAN}[5]${NC} Apply settings (update CLAUDE.md)"
+        clear_line
         echo -e "  ${CYAN}[6]${NC} Show current settings"
+        clear_line
         echo -e "  ${CYAN}[r]${NC} Reset to defaults"
+        clear_line
         echo -e "  ${CYAN}[q]${NC} Done"
+        clear_line
         echo ""
+        clear_below
+    }
+
+    draw_main_menu
+
+    while true; do
+        goto_row 24
+        clear_line
         read -p "Choice: " -n 1 -r choice
         echo ""
 
         case $choice in
             1)
                 delegation_slider
+                draw_main_menu
                 ;;
             2)
                 configure_ai_tools
+                draw_main_menu
                 ;;
             3)
+                exit_alt_screen
                 add_custom_tool
+                enter_alt_screen
+                draw_main_menu
                 ;;
             4)
                 configure_delegation_options
+                draw_main_menu
                 ;;
             5)
+                goto_row 26
+                clear_below
                 generate_claude_md
                 echo ""
                 read -p "Press Enter to continue..."
+                draw_main_menu
                 ;;
             6)
+                exit_alt_screen
                 show_settings
                 read -p "Press Enter to continue..."
+                enter_alt_screen
+                draw_main_menu
                 ;;
             r|R)
-                echo ""
+                goto_row 26
+                clear_below
                 read -p "Reset all settings to defaults? [y/N] " -n 1 -r
                 echo
                 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -734,13 +932,17 @@ main_menu() {
                     echo -e "${GREEN}✓${NC} Settings reset"
                 fi
                 read -p "Press Enter to continue..."
+                draw_main_menu
                 ;;
             q|Q)
                 # Apply settings on exit
+                goto_row 26
+                clear_below
                 generate_claude_md
                 echo ""
                 echo -e "${GREEN}Settings saved!${NC}"
-                echo ""
+                exit_alt_screen
+                trap - EXIT
                 exit 0
                 ;;
         esac
