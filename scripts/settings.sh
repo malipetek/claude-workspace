@@ -626,16 +626,42 @@ configure_tldr_settings() {
     else
         echo -e "  ${RED}✗${NC} llm-tldr not installed"
         echo ""
-        echo -e "  ${DIM}To install llm-tldr:${NC}"
-        echo -e "  ${CYAN}pip install llm-tldr${NC}"
-        echo ""
         echo -e "  ${DIM}llm-tldr provides 95% token reduction through code analysis.${NC}"
         echo -e "  ${DIM}Learn more: https://github.com/parcadei/llm-tldr${NC}"
         echo ""
-        read -p "Press Enter to continue..."
-        enter_alt_screen
-        hide_cursor
-        return
+        read -p "Install llm-tldr now? [Y/n] " -n 1 -r
+        echo
+
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            echo ""
+            echo -e "${BLUE}Installing llm-tldr...${NC}"
+            echo ""
+
+            # Try pip install
+            if command -v pip3 &> /dev/null; then
+                pip3 install llm-tldr && tldr_installed=true
+            elif command -v pip &> /dev/null; then
+                pip install llm-tldr && tldr_installed=true
+            else
+                echo -e "${RED}Error: pip not found${NC}"
+                echo -e "${DIM}Please install Python and pip first, then run:${NC}"
+                echo -e "${CYAN}pip install llm-tldr${NC}"
+            fi
+
+            if [ "$tldr_installed" = true ]; then
+                echo ""
+                echo -e "${GREEN}✓${NC} llm-tldr installed successfully!"
+                echo ""
+            fi
+        fi
+
+        if [ "$tldr_installed" != true ]; then
+            echo ""
+            read -p "Press Enter to continue..."
+            enter_alt_screen
+            hide_cursor
+            return
+        fi
     fi
 
     # Get current defaults from settings
@@ -1025,14 +1051,13 @@ main_menu() {
         case "$key" in
             q|Q)
                 # Save and exit
-                goto_row $((ITEMS_ROW + total + 4))
-                clear_below
                 generate_claude_md
-                echo ""
-                echo -e "${GREEN}Settings saved!${NC}"
                 show_cursor
                 exit_alt_screen
                 trap - EXIT
+                clear
+                echo ""
+                echo -e "${GREEN}Settings saved!${NC}"
                 exit 0
                 ;;
             "")  # Enter - select current item
@@ -1111,14 +1136,13 @@ main_menu() {
                         ;;
                     done)
                         # Save and exit
-                        goto_row $((ITEMS_ROW + total + 4))
-                        clear_below
                         generate_claude_md
-                        echo ""
-                        echo -e "${GREEN}Settings saved!${NC}"
                         show_cursor
                         exit_alt_screen
                         trap - EXIT
+                        clear
+                        echo ""
+                        echo -e "${GREEN}Settings saved!${NC}"
                         exit 0
                         ;;
                 esac
@@ -1127,14 +1151,13 @@ main_menu() {
                 read -rsn2 -t 1 seq
                 if [ -z "$seq" ]; then
                     # Just escape - save and exit
-                    goto_row $((ITEMS_ROW + total + 2))
-                    clear_below
                     generate_claude_md
-                    echo ""
-                    echo -e "${SUCCESS}Settings saved!${NC}"
                     show_cursor
                     exit_alt_screen
                     trap - EXIT
+                    clear
+                    echo ""
+                    echo -e "${SUCCESS}Settings saved!${NC}"
                     exit 0
                 fi
                 local prev=$current

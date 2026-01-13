@@ -193,7 +193,6 @@ ensure_tldr_ignore() {
 configure_tldr_mcp() {
     local project_path="$1"
     local config_file="$project_path/.claude-workspace.json"
-    local mcp_file="$project_path/.mcp.json"
 
     # Check if auto-mcp is enabled (default true)
     local auto_mcp="true"
@@ -212,7 +211,7 @@ configure_tldr_mcp() {
         return 1
     fi
 
-    # Build MCP configuration
+    # Build MCP configuration for this project
     local tldr_config
     tldr_config=$(cat << EOF
 {
@@ -224,27 +223,46 @@ configure_tldr_mcp() {
 EOF
 )
 
+    # Configure in project's .mcp.json (for general MCP support)
+    local mcp_file="$project_path/.mcp.json"
     if [ -f "$mcp_file" ]; then
-        # Merge with existing config
         local temp
         temp=$(mktemp)
         jq --argjson new_server "$tldr_config" \
            '.mcpServers = (.mcpServers // {}) + $new_server' \
            "$mcp_file" > "$temp" && mv "$temp" "$mcp_file"
     else
-        # Create new config
         echo "{\"mcpServers\": $tldr_config}" | jq '.' > "$mcp_file"
     fi
 
-    echo -e "${GREEN}✓${NC} Configured TLDR MCP server"
+    # Also configure in .claude/settings.json for Claude Code
+    local claude_settings_dir="$project_path/.claude"
+    local claude_settings_file="$claude_settings_dir/settings.json"
+
+    mkdir -p "$claude_settings_dir"
+
+    if [ -f "$claude_settings_file" ]; then
+        # Merge with existing Claude settings
+        local temp
+        temp=$(mktemp)
+        jq --argjson new_server "$tldr_config" \
+           '.mcpServers = (.mcpServers // {}) + $new_server' \
+           "$claude_settings_file" > "$temp" && mv "$temp" "$claude_settings_file"
+    else
+        # Create new Claude settings file
+        echo "{\"mcpServers\": $tldr_config}" | jq '.' > "$claude_settings_file"
+    fi
+
+    echo -e "${GREEN}✓${NC} Configured TLDR MCP server (Claude Code + .mcp.json)"
     return 0
 }
 
 # Remove tldr MCP configuration from a project
 remove_tldr_mcp() {
     local project_path="$1"
-    local mcp_file="$project_path/.mcp.json"
 
+    # Remove from .mcp.json
+    local mcp_file="$project_path/.mcp.json"
     if [ -f "$mcp_file" ]; then
         local temp
         temp=$(mktemp)
@@ -254,9 +272,23 @@ remove_tldr_mcp() {
         if [ "$(jq '.mcpServers | length' "$mcp_file" 2>/dev/null)" = "0" ]; then
             rm -f "$mcp_file"
         fi
-
-        echo -e "${GREEN}✓${NC} Removed TLDR MCP server configuration"
     fi
+
+    # Remove from .claude/settings.json
+    local claude_settings_file="$project_path/.claude/settings.json"
+    if [ -f "$claude_settings_file" ]; then
+        local temp
+        temp=$(mktemp)
+        jq 'del(.mcpServers.tldr)' "$claude_settings_file" > "$temp" && mv "$temp" "$claude_settings_file"
+
+        # Remove mcpServers key if empty (but keep other settings)
+        if [ "$(jq '.mcpServers | length' "$claude_settings_file" 2>/dev/null)" = "0" ]; then
+            temp=$(mktemp)
+            jq 'del(.mcpServers)' "$claude_settings_file" > "$temp" && mv "$temp" "$claude_settings_file"
+        fi
+    fi
+
+    echo -e "${GREEN}✓${NC} Removed TLDR MCP server configuration"
 }
 
 #==============================================================================

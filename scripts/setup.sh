@@ -21,6 +21,11 @@ REGISTRY="$INSTALL_DIR/registry.json"
 # Source the menu library for flicker-free menus
 source "$INSTALL_DIR/scripts/lib/menu.sh"
 
+# Source the workspace instructions library for CLAUDE.md updates
+if [ -f "$INSTALL_DIR/scripts/lib/workspace-instructions.sh" ]; then
+    source "$INSTALL_DIR/scripts/lib/workspace-instructions.sh"
+fi
+
 # Theme colors (matching menu.sh polished theme)
 NC='\033[0m'
 BOLD='\033[1m'
@@ -278,7 +283,27 @@ create_workspace_config() {
         echo -e "  ${GREEN}✓${NC} llm-tldr detected"
     else
         echo -e "  ${YELLOW}!${NC} llm-tldr not installed"
-        echo -e "  ${DIM}Install with: pip install llm-tldr${NC}"
+        echo -e "  ${DIM}TLDR provides 95% token reduction through code analysis${NC}"
+        echo ""
+        read -p "Install llm-tldr now? [y/N] " -n 1 -r
+        echo
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo ""
+            echo -e "${BLUE}Installing llm-tldr...${NC}"
+            if command -v pip3 &> /dev/null; then
+                pip3 install llm-tldr && tldr_installed=true
+            elif command -v pip &> /dev/null; then
+                pip install llm-tldr && tldr_installed=true
+            else
+                echo -e "${RED}Error: pip not found${NC}"
+                echo -e "${DIM}Install Python and pip first${NC}"
+            fi
+
+            if [ "$tldr_installed" = true ]; then
+                echo -e "${GREEN}✓${NC} llm-tldr installed!"
+            fi
+        fi
     fi
 
     if [ "$tldr_installed" = true ]; then
@@ -336,6 +361,14 @@ EOF
 
     echo ""
     echo -e "${GREEN}✓${NC} Created $config_file"
+
+    # Update CLAUDE.md with workspace instructions if there are dev processes
+    if [ ${#processes[@]} -gt 0 ]; then
+        if type update_workspace_instructions &>/dev/null; then
+            update_workspace_instructions "$project_path"
+        fi
+    fi
+
     echo ""
     echo -e "${BLUE}Contents:${NC}"
     cat "$config_file"

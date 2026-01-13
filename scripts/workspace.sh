@@ -41,9 +41,13 @@
 
 SCRIPT_DIR="$HOME/.claude-workspace/scripts"
 
-# Source TLDR library
+# Source libraries
 if [ -f "$SCRIPT_DIR/lib/tldr.sh" ]; then
     source "$SCRIPT_DIR/lib/tldr.sh"
+fi
+
+if [ -f "$SCRIPT_DIR/lib/workspace-instructions.sh" ]; then
+    source "$SCRIPT_DIR/lib/workspace-instructions.sh"
 fi
 
 show_help() {
@@ -183,6 +187,16 @@ if [ -f "$CONFIG_FILE" ]; then
             echo "  Warning: TLDR library not loaded"
         fi
         echo ""
+    fi
+fi
+
+# Workspace Instructions - Update CLAUDE.md with dev-logs instructions
+if [ "$PROCESS_COUNT" -gt 0 ]; then
+    if type update_workspace_instructions &>/dev/null; then
+        CLAUDE_MD="$PROJECT_PATH/CLAUDE.md"
+        if [ ! -f "$CLAUDE_MD" ] || ! grep -q "## Workspace Dev Processes" "$CLAUDE_MD" 2>/dev/null; then
+            update_workspace_instructions "$PROJECT_PATH"
+        fi
     fi
 fi
 
