@@ -364,33 +364,33 @@ fi
 source "$SCRIPT_DIR/lib/menu.sh"
 
 # Build menu with projects and commands
-menu_init "CLAUDE WORKSPACE v$VERSION"
-menu_set_hint "↑/↓: Navigate   Enter: Select   w: Workspace   s: Simple   q: Quit"
+menu_init "Claude Workspace" "v$VERSION"
 
 # Add projects section
 if [ ${#PROJECT_NAMES[@]} -gt 0 ]; then
+    menu_add_separator "Projects"
+
     for name in "${PROJECT_NAMES[@]}"; do
         proj_path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
 
         indicator=""
         if [ -f "$proj_path/.claude-workspace.json" ]; then
             count=$(jq '.processes | length' "$proj_path/.claude-workspace.json" 2>/dev/null || echo 0)
-            indicator=" [⊞ $count]"
+            [ "$count" -gt 0 ] && indicator="$count processes"
         fi
 
-        menu_add_item "project:$name" "$name$indicator" "$proj_path"
+        menu_add_item "project:$name" "$name" "$indicator"
     done
-
-    menu_add_separator "COMMANDS"
 fi
 
 # Add commands
-menu_add_item "cmd:setup" "⚙️  Setup Wizard" "Configure projects and workspaces"
-menu_add_item "cmd:settings" "🎛️  Settings" "AI tools and delegation settings"
-menu_add_item "cmd:add" "➕ Add Project" "Add a new project to registry"
-menu_add_item "cmd:list" "📋 List Projects" "Show all registered projects"
-menu_add_item "cmd:update" "🔄 Update" "Update to latest version"
-menu_add_item "cmd:help" "❓ Help" "Show help and documentation"
+menu_add_separator "Commands"
+menu_add_item "cmd:setup" "Setup Wizard" "Configure projects and workspaces"
+menu_add_item "cmd:settings" "Settings" "AI tools and delegation"
+menu_add_item "cmd:add" "Add Project" "Add a new project"
+menu_add_item "cmd:list" "List Projects" "Show all registered projects"
+menu_add_item "cmd:update" "Update" "Update to latest version"
+menu_add_item "cmd:help" "Help" "Show documentation"
 
 # Custom key handler for w/s keys
 menu_run_with_extras() {
@@ -452,22 +452,33 @@ menu_run_with_extras() {
                 return 0
                 ;;
             $'\x1b')
-                read -rsn2 -t 1 key
-                case "$key" in
-                    '[A')  # Up
-                        ((MENU_SELECTED--))
-                        [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
-                        menu_skip_separator "up"
-                        ;;
-                    '[B')  # Down
-                        ((MENU_SELECTED++))
-                        [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
-                        menu_skip_separator "down"
-                        ;;
-                esac
-
-                if [ $prev_selected -ne $MENU_SELECTED ]; then
-                    menu_redraw_changed $prev_selected $MENU_SELECTED
+                # Check if just escape or escape sequence
+                read -rsn1 -t 0.1 next_key
+                if [ -z "$next_key" ]; then
+                    # Just escape, quit
+                    MENU_RESULT=""
+                    menu_show_cursor
+                    menu_exit_alt_screen
+                    trap - EXIT
+                    return 1
+                else
+                    # Escape sequence, handle arrow keys
+                    read -rsn1 -t 0.1 third_key
+                    case "${next_key}${third_key}" in
+                        '[A')  # Up
+                            ((MENU_SELECTED--))
+                            [ $MENU_SELECTED -lt 0 ] && MENU_SELECTED=$((total - 1))
+                            menu_skip_separator "up"
+                            ;;
+                        '[B')  # Down
+                            ((MENU_SELECTED++))
+                            [ $MENU_SELECTED -ge $total ] && MENU_SELECTED=0
+                            menu_skip_separator "down"
+                            ;;
+                    esac
+                    if [ $prev_selected -ne $MENU_SELECTED ]; then
+                        menu_redraw_changed $prev_selected $MENU_SELECTED
+                    fi
                 fi
                 ;;
         esac

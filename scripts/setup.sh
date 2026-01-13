@@ -21,15 +21,31 @@ REGISTRY="$INSTALL_DIR/registry.json"
 # Source the menu library for flicker-free menus
 source "$INSTALL_DIR/scripts/lib/menu.sh"
 
-# Colors (also in menu.sh but kept for compatibility)
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
+# Theme colors (matching menu.sh polished theme)
+NC='\033[0m'
 BOLD='\033[1m'
 DIM='\033[2m'
-NC='\033[0m'
+
+# Semantic colors - 256-color codes for better terminal compatibility
+PRIMARY='\033[38;5;216m'          # Light peach/orange
+PRIMARY_BG='\033[48;5;216m'
+PRIMARY_FG='\033[38;5;234m'       # Dark text on primary bg
+
+TEXT='\033[38;5;252m'             # Light gray
+TEXT_MUTED='\033[38;5;245m'       # Muted gray
+TEXT_DIM='\033[38;5;240m'         # Dimmer gray
+
+ACCENT='\033[38;5;183m'           # Purple accent
+SUCCESS='\033[38;5;114m'          # Green
+WARNING='\033[38;5;215m'          # Orange
+ERROR='\033[38;5;203m'            # Red
+
+# Legacy aliases for compatibility
+RED="$ERROR"
+GREEN="$SUCCESS"
+YELLOW="$WARNING"
+BLUE="$ACCENT"
+CYAN="$PRIMARY"
 
 # Cursor positioning functions
 goto_row() {
@@ -73,17 +89,16 @@ if [ ! -f "$REGISTRY" ]; then
     echo '{"projects":{}}' > "$REGISTRY"
 fi
 
+# Clean polished header - no box characters
 show_header() {
     local use_clear=${1:-true}
     if [ "$use_clear" = true ]; then
         goto_row 1
     fi
     clear_line
-    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo ""
     clear_line
-    echo -e "${CYAN}║${NC}  ${GREEN}CLAUDE WORKSPACE SETUP WIZARD${NC}                                              ${CYAN}║${NC}"
-    clear_line
-    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "    ${TEXT}${BOLD}Setup Wizard${NC}"
     clear_line
     echo ""
 }
@@ -91,9 +106,8 @@ show_header() {
 # Draw header once (for alt screen initial draw)
 draw_header_once() {
     goto_row 1
-    echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}CLAUDE WORKSPACE SETUP WIZARD${NC}                                              ${CYAN}║${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "    ${TEXT}${BOLD}Setup Wizard${NC}                                                               ${TEXT_MUTED}esc${NC}"
     echo ""
 }
 
@@ -287,7 +301,7 @@ add_project_to_registry() {
     echo -e "${GREEN}✓${NC} Added '$project_name' to registry"
 }
 
-# Interactive multi-select function
+# Interactive multi-select function - polished style
 # Usage: interactive_select "Title" array[@] selected[@]
 # Returns selected indices in SELECTED_INDICES array
 interactive_multiselect() {
@@ -312,41 +326,36 @@ interactive_multiselect() {
     # Draw static header
     draw_static() {
         goto_row 1
-        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║${NC}  ${GREEN}$title${NC}"
-        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "  ${DIM}↑/↓: Navigate   Space: Toggle   Enter: Confirm   a: All   n: None   q: Cancel${NC}"
+        echo -e "    ${TEXT}${BOLD}$title${NC}                                                                   ${TEXT_MUTED}esc${NC}"
         echo ""
+        echo -e "    ${TEXT_MUTED}Select projects to add to registry${NC}"
+        echo ""
+        echo -e "    ${ACCENT}${BOLD}Projects${NC}  ${TEXT_DIM}space to toggle · a: all · n: none${NC}"
     }
 
     # Draw a single item
     draw_item() {
         local i=$1
-        local row=$((ITEMS_ROW + i * 2))
+        local row=$((ITEMS_ROW + i))
 
         local item="${items[$i]}"
         local name=$(basename "$item")
-        local checkbox="[ ]"
-        local has_workspace=""
+        local checkbox="○"
+        local status=""
 
-        [ -f "$item/.claude-workspace.json" ] && has_workspace=" ${CYAN}[configured]${NC}"
+        [ -f "$item/.claude-workspace.json" ] && status="configured"
 
         if [ "${selected[$i]}" -eq 1 ]; then
-            checkbox="${GREEN}[✓]${NC}"
+            checkbox="${SUCCESS}●${NC}"
         fi
 
         goto_row $row
         clear_line
         if [ $i -eq $current ]; then
-            echo -e "  ${BOLD}▶ $checkbox $name$has_workspace${NC}"
-            goto_row $((row + 1))
-            clear_line
-            echo -e "    ${DIM}$item${NC}"
+            echo -e "    ${PRIMARY_BG}${PRIMARY_FG}${BOLD} $checkbox $name ${NC}${PRIMARY_BG}${PRIMARY_FG} $status ${NC}"
         else
-            echo -e "    $checkbox $name$has_workspace"
-            goto_row $((row + 1))
-            clear_line
+            echo -e "     $checkbox ${TEXT}$name${NC} ${TEXT_MUTED}$status${NC}"
         fi
     }
 
@@ -364,9 +373,9 @@ interactive_multiselect() {
             [ "$s" -eq 1 ] && ((count++))
         done
 
-        goto_row $((ITEMS_ROW + total * 2 + 1))
+        goto_row $((ITEMS_ROW + total + 2))
         clear_line
-        echo -e "  ${BLUE}Selected: $count / $total${NC}"
+        echo -e "    ${TEXT_MUTED}$count of $total selected${NC}"
     }
 
     # Initial draw
@@ -415,9 +424,18 @@ interactive_multiselect() {
                 break
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn2 -t 1 key
+                read -rsn1 -t 0.1 next_key
+                if [ -z "$next_key" ]; then
+                    # Just escape - cancel
+                    SELECTED_INDICES=()
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    return 1
+                fi
+                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "$key" in
+                case "${next_key}${third_key}" in
                     '[A')  # Up arrow
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
@@ -446,13 +464,13 @@ interactive_multiselect() {
     return 0
 }
 
-# Interactive folder navigator
+# Interactive folder navigator - polished style
 # Usage: interactive_folder_select "Title" [start_path]
 # Returns selected path in SELECTED_PATH variable
 interactive_folder_select() {
     local title="$1"
     local current_dir="${2:-$HOME}"
-    local HEADER_ROWS=8  # Header + hint + current path
+    local HEADER_ROWS=9  # Header + hint + current path
     local MAX_VISIBLE=15
 
     # Normalize path
@@ -486,19 +504,19 @@ interactive_folder_select() {
     # Draw static header
     draw_static_header() {
         goto_row 1
-        echo -e "${CYAN}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║${NC}  ${GREEN}$title${NC}"
-        echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "  ${DIM}↑/↓: Navigate   Enter: Open folder   s: Select this folder   q: Cancel${NC}"
+        echo -e "    ${TEXT}${BOLD}$title${NC}                                                                   ${TEXT_MUTED}esc${NC}"
         echo ""
+        echo -e "    ${TEXT_MUTED}Navigate to select a folder${NC}"
+        echo ""
+        echo -e "    ${ACCENT}${BOLD}Folders${NC}  ${TEXT_DIM}s: select · enter: open${NC}"
     }
 
     # Draw current path
     draw_current_path() {
         goto_row 7
         clear_line
-        echo -e "  ${BLUE}Current:${NC} ${BOLD}$current_dir${NC}"
+        echo -e "    ${TEXT_MUTED}Path:${NC} ${TEXT}${BOLD}$current_dir${NC}"
         clear_line
         echo ""
     }
@@ -516,7 +534,7 @@ interactive_folder_select() {
         clear_below
 
         if [ $total -eq 0 ]; then
-            echo -e "  ${DIM}(empty directory)${NC}"
+            echo -e "    ${TEXT_DIM}(empty directory)${NC}"
         else
             # Calculate visible range
             local start=0
@@ -529,25 +547,20 @@ interactive_folder_select() {
                 [ $end -gt $total ] && end=$total && start=$((end - MAX_VISIBLE))
             fi
 
-            [ $start -gt 0 ] && echo -e "  ${DIM}  ↑ more above${NC}"
+            [ $start -gt 0 ] && echo -e "    ${TEXT_DIM}↑ more${NC}"
 
             for ((i=start; i<end; i++)); do
                 local name="${dirs[$i]}"
-                local icon="📁"
-                [ "$name" = ".." ] && icon="📂"
 
                 if [ $i -eq $current ]; then
-                    echo -e "  ${BOLD}▶ $icon $name${NC}"
+                    echo -e "    ${PRIMARY_BG}${PRIMARY_FG}${BOLD} $name ${NC}"
                 else
-                    echo -e "    $icon $name"
+                    echo -e "     ${TEXT}$name${NC}"
                 fi
             done
 
-            [ $end -lt $total ] && echo -e "  ${DIM}  ↓ more below${NC}"
+            [ $end -lt $total ] && echo -e "    ${TEXT_DIM}↓ more${NC}"
         fi
-
-        echo ""
-        echo -e "  ${DIM}Press 's' to select current folder${NC}"
     }
 
     # Initial draw
@@ -602,9 +615,18 @@ interactive_folder_select() {
                 fi
                 ;;
             $'\x1b')  # Escape sequence (arrow keys)
-                read -rsn2 -t 1 key
+                read -rsn1 -t 0.1 next_key
+                if [ -z "$next_key" ]; then
+                    # Just escape - cancel
+                    SELECTED_PATH=""
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    return 1
+                fi
+                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "$key" in
+                case "${next_key}${third_key}" in
                     '[A')  # Up arrow
                         ((current--))
                         [ $current -lt 0 ] && current=$((total > 0 ? total - 1 : 0))
@@ -732,31 +754,31 @@ scan_for_projects() {
     read -p "Press Enter to continue..."
 }
 
-# Main menu
+# Main menu - polished style
 main_menu() {
     # Menu items: id, label, description
     local -a menu_ids=("scan" "add" "configure" "view" "settings" "ghostty" "quit")
     local -a menu_labels=(
-        "Scan for projects"
-        "Add a specific project"
-        "Configure workspace"
-        "View registered projects"
-        "AI tools & delegation"
-        "Check Ghostty permissions"
-        "Quit"
+        "Scan for Projects"
+        "Add Project"
+        "Configure Workspace"
+        "View Projects"
+        "AI Settings"
+        "Check Ghostty"
+        "Done"
     )
     local -a menu_descs=(
-        "Scan a directory for projects to add"
-        "Browse and add a specific project folder"
-        "Create/edit .claude-workspace.json for a project"
-        "List all registered projects"
-        "Configure AI delegation settings"
-        "Test Ghostty accessibility permissions"
-        "Exit setup wizard"
+        "Scan directory for projects"
+        "Add a specific folder"
+        "Edit .claude-workspace.json"
+        "List registered projects"
+        "AI tools and delegation"
+        "Test accessibility"
+        "Exit setup"
     )
     local total=${#menu_ids[@]}
     local current=0
-    local ITEMS_ROW=8
+    local ITEMS_ROW=7
 
     enter_alt_screen
     hide_cursor
@@ -765,13 +787,12 @@ main_menu() {
     # Draw header
     draw_header() {
         goto_row 1
-        draw_header_once
-        goto_row 5
-        clear_line
-        echo -e "${BOLD}What would you like to do?${NC}"
-        clear_line
         echo ""
-        echo -e "  ${DIM}↑/↓: Navigate   Enter: Select   q: Quit${NC}"
+        echo -e "    ${TEXT}${BOLD}Setup Wizard${NC}                                                               ${TEXT_MUTED}esc${NC}"
+        echo ""
+        echo -e "    ${TEXT_MUTED}Configure projects and workspaces${NC}"
+        echo ""
+        echo -e "    ${ACCENT}${BOLD}Options${NC}"
     }
 
     # Draw single item
@@ -782,9 +803,9 @@ main_menu() {
         goto_row $row
         clear_line
         if [ $i -eq $current ]; then
-            echo -e " ${GREEN}▶${NC} ${BOLD}${menu_labels[$i]}${NC}"
+            echo -e "    ${PRIMARY_BG}${PRIMARY_FG}${BOLD} ${menu_labels[$i]} ${NC}${PRIMARY_BG}${PRIMARY_FG} ${menu_descs[$i]} ${NC}"
         else
-            echo -e "   ${menu_labels[$i]}"
+            echo -e "     ${TEXT}${menu_labels[$i]}${NC} ${TEXT_MUTED}${menu_descs[$i]}${NC}"
         fi
     }
 
@@ -795,13 +816,9 @@ main_menu() {
         done
     }
 
-    # Draw description
+    # No separate description - it's inline now
     draw_description() {
-        goto_row $((ITEMS_ROW + total + 1))
-        clear_line
-        echo ""
-        clear_line
-        echo -e "  ${DIM}${menu_descs[$current]}${NC}"
+        :  # No-op
     }
 
     # Initial draw
@@ -939,9 +956,20 @@ main_menu() {
                 esac
                 ;;
             $'\x1b')  # Escape sequence
-                read -rsn2 -t 1 seq
+                read -rsn1 -t 0.1 next_key
+                if [ -z "$next_key" ]; then
+                    # Just escape - quit
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    echo ""
+                    echo -e "${SUCCESS}Setup complete!${NC}"
+                    echo ""
+                    exit 0
+                fi
+                read -rsn1 -t 0.1 third_key
                 local prev=$current
-                case "$seq" in
+                case "${next_key}${third_key}" in
                     '[A')  # Up
                         ((current--))
                         [ $current -lt 0 ] && current=$((total - 1))
@@ -954,7 +982,6 @@ main_menu() {
                 if [ $prev -ne $current ]; then
                     draw_item $prev
                     draw_item $current
-                    draw_description
                 fi
                 ;;
         esac
