@@ -299,31 +299,41 @@ remove_tldr_mcp() {
 generate_tldr_instructions() {
     cat << 'EOF'
 
-## TLDR Code Analysis (Preferred)
+## 🔍 REQUIRED: Use TLDR for Code Exploration
 
-This project has TLDR indexes for efficient code exploration. **ALWAYS prefer TLDR tools over reading raw files** when understanding code structure.
+**YOU HAVE TLDR MCP TOOLS** - Use them FIRST before reading raw files. They provide 95% token savings and semantic understanding.
 
-### Available MCP Tools
+### 🔴 MANDATORY: Use These MCP Tools
 
-| Tool | Use Case | Example |
-|------|----------|---------|
-| `tldr_context` | Understand a function/class | `tldr context MyClass --project .` |
-| `tldr_semantic` | Search by behavior/concept | `tldr semantic "error handling" .` |
-| `tldr_impact` | Find callers before refactoring | `tldr impact processPayment .` |
+You have these MCP tools available. **USE THEM**:
 
-### Recommended Workflow
+| MCP Tool | When to Use |
+|----------|-------------|
+| `tldr_context` | **FIRST** - Before reading any source file, get context on functions/classes |
+| `tldr_semantic` | To find code by behavior ("error handling", "user auth", "database queries") |
+| `tldr_impact` | **BEFORE EDITING** - Check what calls a function before modifying it |
 
-1. **Exploring unfamiliar code?** Start with `tldr semantic "what you're looking for"`
-2. **Understanding a specific symbol?** Use `tldr context function_name`
-3. **Before modifying a function?** Check `tldr impact function_name` for callers
-4. **Need exact implementation?** Only then read raw files
+### ✅ REQUIRED Workflow
 
-### Why Use TLDR?
+1. **Need to understand code?** → `tldr_context <symbol>` FIRST, not `Read`
+2. **Searching for functionality?** → `tldr_semantic "description"` FIRST, not `Grep`
+3. **About to modify a function?** → `tldr_impact <function>` FIRST to see callers
+4. **Only read raw files** when you need exact implementation details
 
-- **95% fewer tokens** than reading raw source files
-- **Semantic understanding** - finds code by behavior, not just text
-- **Cross-file awareness** - understands dependencies and call graphs
-- **Faster responses** - pre-indexed for instant queries
+### 🚫 DON'T DO THIS
+
+- ❌ Don't read entire files to understand a function - use `tldr_context`
+- ❌ Don't grep for code patterns - use `tldr_semantic`
+- ❌ Don't modify functions without checking impact - use `tldr_impact`
+
+### Why TLDR?
+
+- **95% fewer tokens** - structured summaries instead of raw code
+- **Semantic search** - finds code by behavior, not just text matching
+- **Dependency awareness** - understands call graphs and relationships
+- **Pre-indexed** - instant results, no scanning
+
+**THE TLDR TOOLS ARE AVAILABLE. USE THEM PROACTIVELY.**
 
 EOF
 }

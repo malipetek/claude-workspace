@@ -50,6 +50,10 @@ if [ -f "$SCRIPT_DIR/lib/workspace-instructions.sh" ]; then
     source "$SCRIPT_DIR/lib/workspace-instructions.sh"
 fi
 
+if [ -f "$SCRIPT_DIR/lib/feature-status.sh" ]; then
+    source "$SCRIPT_DIR/lib/feature-status.sh"
+fi
+
 show_help() {
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -194,10 +198,14 @@ fi
 if [ "$PROCESS_COUNT" -gt 0 ]; then
     if type update_workspace_instructions &>/dev/null; then
         CLAUDE_MD="$PROJECT_PATH/CLAUDE.md"
-        if [ ! -f "$CLAUDE_MD" ] || ! grep -q "## Workspace Dev Processes" "$CLAUDE_MD" 2>/dev/null; then
-            update_workspace_instructions "$PROJECT_PATH"
-        fi
+        # Always update to ensure latest emphatic instructions
+        update_workspace_instructions "$PROJECT_PATH"
     fi
+fi
+
+# Show feature status with warnings
+if type show_feature_status &>/dev/null; then
+    show_feature_status "$PROJECT_PATH"
 fi
 
 # Build the process commands

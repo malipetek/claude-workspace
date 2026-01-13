@@ -33,82 +33,63 @@ generate_dev_process_instructions() {
 
     cat << EOF
 
-## Workspace Dev Processes
+## ⚠️ REQUIRED: Workspace Dev Process Integration
 
-This project runs with **live dev processes in watch mode**. All terminals are captured and logs are available for you to read.
+**THIS IS CRITICAL**: This workspace has live dev processes running in watch mode. You MUST use the dev-logs system to check for errors instead of running builds or asking the user.
 
-### Key Points
+### 🔴 MANDATORY BEHAVIOR
 
-1. **No manual builds needed** - All processes run in watch mode and auto-reload on file changes
-2. **Logs are captured** - All terminal output is saved to \`~/.claude-workspace/dev-logs/${project_name}/\`
-3. **Check logs after changes** - After editing files, check the logs to verify changes compiled/reloaded correctly
-
-### Checking Dev Process Logs
-
-**Quick summary of all processes:**
-\`\`\`bash
-~/.claude-workspace/scripts/dev-logs.sh summary
-\`\`\`
-
-**Check specific process logs:**
-\`\`\`bash
-# Last 50 lines from a process
-~/.claude-workspace/scripts/dev-logs.sh tail <process_name>
-
-# Last 100 lines
-~/.claude-workspace/scripts/dev-logs.sh tail <process_name> 100
-
-# Only error lines
-~/.claude-workspace/scripts/dev-logs.sh errors <process_name>
-
-# Recent errors across all processes
-~/.claude-workspace/scripts/dev-logs.sh recent
-\`\`\`
-
-**List available processes:**
-\`\`\`bash
-~/.claude-workspace/scripts/dev-logs.sh list
-\`\`\`
-
-### After Making Code Changes
-
-1. **Wait 1-2 seconds** for hot reload to trigger
-2. **Check the logs** to verify the change compiled successfully:
+After EVERY code change you make:
+1. **WAIT 2 seconds** for hot-reload
+2. **RUN THIS COMMAND** to check for errors:
    \`\`\`bash
    ~/.claude-workspace/scripts/dev-logs.sh summary
    \`\`\`
-3. **If errors appear**, check details:
+3. If errors exist, check details with:
    \`\`\`bash
    ~/.claude-workspace/scripts/dev-logs.sh errors
    \`\`\`
 
-### Common Process Names
+### 🚫 NEVER DO THESE
 
-Typical process names in this workspace:
-- \`frontend\` - Frontend dev server (Next.js, Vite, etc.)
-- \`backend\` - Backend API server
-- \`database\` - Database or Docker services
-- \`types\` - TypeScript compiler in watch mode
-- \`worker\` - Background job processor
+- ❌ **NEVER** run \`npm run build\`, \`npm run dev\`, \`pnpm build\`, etc. - processes are ALREADY running
+- ❌ **NEVER** ask the user to "check the terminal" or "look at the output" - READ THE LOGS YOURSELF
+- ❌ **NEVER** assume you need to start or trigger builds - watch mode auto-compiles on save
 
-### IMPORTANT: DO NOT
+### ✅ ALWAYS DO THESE
 
-- **DO NOT** run \`npm run build\` or \`npm run dev\` - processes are already running
-- **DO NOT** ask the user to check terminal output - read the logs yourself
-- **DO NOT** assume builds need to be triggered - watch mode handles this automatically
+- ✅ **ALWAYS** check \`dev-logs.sh summary\` after editing code
+- ✅ **ALWAYS** read error details from logs before asking user for help
+- ✅ **ALWAYS** use the log commands below to see build output
 
-### Log File Location
+### Dev Log Commands
 
-Direct log file paths:
-\`\`\`
-~/.claude-workspace/dev-logs/${project_name}/<process>.log
-\`\`\`
-
-You can also read these directly with the Read tool:
 \`\`\`bash
-# Example: read the last 100 lines of frontend logs
+# Quick status - ARE THERE ERRORS? (run this after every change)
+~/.claude-workspace/scripts/dev-logs.sh summary
+
+# See all errors with context
+~/.claude-workspace/scripts/dev-logs.sh errors
+
+# Tail a specific process (frontend, backend, etc.)
 ~/.claude-workspace/scripts/dev-logs.sh tail frontend 100
+
+# List all available processes
+~/.claude-workspace/scripts/dev-logs.sh list
 \`\`\`
+
+### Log Location
+
+Logs are at: \`~/.claude-workspace/dev-logs/${project_name}/<process>.log\`
+
+### Why This Matters
+
+The dev processes are running in separate terminal panes with captured output. Running builds would:
+1. Duplicate running processes (port conflicts)
+2. Waste time when errors are already visible in logs
+3. Frustrate the user who set up this workflow
+
+**USE THE LOGS. THEY HAVE EVERYTHING YOU NEED.**
 
 EOF
 }

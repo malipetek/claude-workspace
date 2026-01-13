@@ -39,5 +39,5 @@ cleanup() {
 # Set trap to run cleanup on exit
 trap cleanup EXIT
 
-# Run Claude
-claude "$@"
+# Run Claude with skip permissions (already in project directory, no initial message needed)
+claude --dangerously-skip-permissions

@@ -4,7 +4,7 @@
 #  WORKSPACE CLEANUP
 #══════════════════════════════════════════════════════════════════════════════
 #
-#  Kills all dev processes for a project.
+#  Kills all dev processes for a project (including child processes).
 #  Called automatically when Claude exits from a workspace session.
 #
 #  USAGE:
@@ -28,6 +28,20 @@ fi
 echo ""
 echo "Cleaning up dev processes for: $PROJECT_NAME"
 
+# Recursively kill a process and all its children
+kill_tree() {
+    local pid=$1
+    local signal=${2:-TERM}
+
+    # Find and kill children first (depth-first)
+    for child in $(pgrep -P "$pid" 2>/dev/null); do
+        kill_tree "$child" "$signal"
+    done
+
+    # Then kill the process itself
+    kill -"$signal" "$pid" 2>/dev/null
+}
+
 # Find and kill all processes with PID files
 for pid_file in "$LOG_DIR"/*.pid; do
     [ -f "$pid_file" ] || continue
@@ -40,15 +54,15 @@ for pid_file in "$LOG_DIR"/*.pid; do
         if kill -0 "$PID" 2>/dev/null; then
             echo "  Stopping $PROC_NAME (PID: $PID)..."
 
-            # Try graceful shutdown first (SIGTERM)
-            kill "$PID" 2>/dev/null
+            # Try graceful shutdown of entire process tree first (SIGTERM)
+            kill_tree "$PID" TERM
 
             # Wait a moment
             sleep 0.5
 
             # Force kill if still running (SIGKILL)
             if kill -0 "$PID" 2>/dev/null; then
-                kill -9 "$PID" 2>/dev/null
+                kill_tree "$PID" KILL
             fi
 
             echo "  ✓ $PROC_NAME stopped"
