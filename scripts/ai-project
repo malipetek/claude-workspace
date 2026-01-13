@@ -33,6 +33,54 @@ SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 REGISTRY="$HOME/.claude-workspace/registry.json"
 VERSION="1.4.2"
 
+# Theme colors (matching menu.sh polished theme)
+NC='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+
+# Semantic colors - 256-color codes for better terminal compatibility
+PRIMARY='\033[38;5;216m'          # Light peach/orange
+PRIMARY_BG='\033[48;5;216m'
+PRIMARY_FG='\033[38;5;234m'       # Dark text on primary bg
+
+TEXT='\033[38;5;252m'             # Light gray
+TEXT_MUTED='\033[38;5;245m'       # Muted gray
+TEXT_DIM='\033[38;5;240m'         # Dimmer gray
+
+ACCENT='\033[38;5;183m'           # Purple accent
+SUCCESS='\033[38;5;114m'          # Green
+WARNING='\033[38;5;215m'          # Orange
+ERROR='\033[38;5;203m'            # Red
+
+# Cursor positioning functions
+goto_row() {
+    printf '\033[%d;1H' "$1"
+}
+
+clear_line() {
+    printf '\033[K'
+}
+
+clear_below() {
+    printf '\033[J'
+}
+
+hide_cursor() {
+    printf '\033[?25l'
+}
+
+show_cursor() {
+    printf '\033[?25h'
+}
+
+enter_alt_screen() {
+    tput smcup 2>/dev/null || printf '\033[?1049h'
+}
+
+exit_alt_screen() {
+    tput rmcup 2>/dev/null || printf '\033[?1049l'
+}
+
 show_help() {
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════════════╗
@@ -234,7 +282,8 @@ list_projects() {
     echo "╚══════════════════════════════════════════════════════════════════════════════╝"
     echo ""
 
-    jq -r '.projects | to_entries[] | "\(.key)\t\(.value.path)\t\(.value.description // "")"' "$REGISTRY" 2>/dev/null | while IFS=$'\t' read -r name path desc; do
+    jq -r '.projects | to_entries[] | "\(.key)\t\(.value.path)\t\(.value.description // \"\")"' "$REGISTRY" 2>/dev/null | while IFS=$'\t' read -r name path desc;
+    do
         local workspace_indicator=""
         [ -f "$path/.claude-workspace.json" ] && workspace_indicator=" [workspace]"
 
@@ -334,74 +383,200 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-# Get all project names
-PROJECT_NAMES=($(jq -r '.projects | keys[]' "$REGISTRY" 2>/dev/null))
-
-# If project name provided as argument
-if [ -n "$1" ]; then
-    PROJECT_NAME="$1"
-
-    # Check if project exists
-    PROJECT_PATH=$(jq -r ".projects[\"$PROJECT_NAME\"].path // empty" "$REGISTRY")
-
-    if [ -z "$PROJECT_PATH" ]; then
-        echo "Error: Project '$PROJECT_NAME' not found in registry"
-        echo ""
-        echo "Available projects:"
-        for name in "${PROJECT_NAMES[@]}"; do
-            echo "  - $name"
+# Interactive Main Menu
+interactive_project_select() {
+    # Get all project names
+    local -a project_names=($(jq -r '.projects | keys[]' "$REGISTRY" 2>/dev/null))
+    
+    # Build menu items
+    local -a ids=()
+    local -a labels=()
+    local -a descs=()
+    local -a types=() # item or separator
+    
+    # Add Projects
+    if [ ${#project_names[@]} -gt 0 ]; then
+        types+=("separator")
+        labels+=("Projects")
+        ids+=("")
+        descs+=("")
+        
+        for name in "${project_names[@]}"; do
+            local proj_path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
+            local indicator=""
+            if [ -f "$proj_path/.claude-workspace.json" ]; then
+                local count=$(jq '.processes | length' "$proj_path/.claude-workspace.json" 2>/dev/null || echo 0)
+                [ "$count" -gt 0 ] && indicator="$count processes"
+            fi
+            
+            types+=("item")
+            ids+=("project:$name")
+            labels+=("$name")
+            descs+=("$indicator")
         done
-        echo ""
-        echo "Run 'claude-workspace add /path/to/project' to add a new project."
-        exit 1
     fi
-
-    # Check if directory exists
-    if [ ! -d "$PROJECT_PATH" ]; then
-        echo "Error: Project directory not found: $PROJECT_PATH"
-        exit 1
-    fi
-
-    launch_project "$PROJECT_PATH" "$FORCE_MODE"
-    exit 0
-fi
-
-# Source the menu library
-source "$SCRIPT_DIR/lib/menu.sh"
-
-# Build menu with projects and commands
-menu_init "Claude Workspace" "v$VERSION"
-
-# Add projects section
-if [ ${#PROJECT_NAMES[@]} -gt 0 ]; then
-    menu_add_separator "Projects"
-
-    for name in "${PROJECT_NAMES[@]}"; do
-        proj_path=$(jq -r ".projects[\"$name\"].path" "$REGISTRY")
-
-        indicator=""
-        if [ -f "$proj_path/.claude-workspace.json" ]; then
-            count=$(jq '.processes | length' "$proj_path/.claude-workspace.json" 2>/dev/null || echo 0)
-            [ "$count" -gt 0 ] && indicator="$count processes"
-        fi
-
-        menu_add_item "project:$name" "$name" "$indicator"
+    
+    # Add Commands
+    types+=("separator")
+    labels+=("Commands")
+    ids+=("")
+    descs+=("")
+    
+    types+=("item"); ids+=("cmd:setup"); labels+=("Setup Wizard"); descs+=("Configure projects and workspaces")
+    types+=("item"); ids+=("cmd:settings"); labels+=("Settings"); descs+=("AI tools and delegation")
+    types+=("item"); ids+=("cmd:add"); labels+=("Add Project"); descs+=("Add a new project")
+    types+=("item"); ids+=("cmd:list"); labels+=("List Projects"); descs+=("Show all registered projects")
+    types+=("item"); ids+=("cmd:update"); labels+=("Update"); descs+=("Update to latest version")
+    types+=("item"); ids+=("cmd:help"); labels+=("Help"); descs+=("Show documentation")
+    
+    local total=${#ids[@]}
+    local current=0
+    
+    # Find first selectable item
+    while [ "${types[$current]}" = "separator" ] && [ $current -lt $total ]; do
+        ((current++))
     done
-fi
+    
+    local ITEMS_ROW=4
+    
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+    
+    draw_header() {
+        goto_row 1
+        clear_line
+        echo ""
+        clear_line
+        echo -e "    ${TEXT}${BOLD}Claude Workspace${NC} ${TEXT_MUTED}v${VERSION}${NC}                                       ${TEXT_MUTED}esc${NC}"
+        echo ""
+    }
+    
+    draw_item() {
+        local i=$1
+        local row=$((ITEMS_ROW + i))
+        
+        goto_row $row
+        clear_line
+        
+        local type="${types[$i]}"
+        local label="${labels[$i]}"
+        local desc="${descs[$i]}"
+        
+        if [ "$type" = "separator" ]; then
+            if [ -n "$label" ]; then
+                echo -e "    ${ACCENT}${BOLD}${label}${NC}"
+            else
+                echo ""
+            fi
+            return
+        fi
+        
+        if [ $i -eq $current ]; then
+            local line_content=" ${label}"
+            local desc_content=""
+            [ -n "$desc" ] && desc_content=" ${TEXT_DIM}${desc}${NC}"
+            
+            # Pad background
+            echo -e "    ${PRIMARY_BG}${PRIMARY_FG}${BOLD}${line_content}${NC}${PRIMARY_BG}${PRIMARY_FG}${desc_content} ${NC}"
+        else
+            echo -e "     ${TEXT}${label}${NC} ${TEXT_MUTED}${desc}${NC}"
+        fi
+    }
+    
+    draw_all() {
+        for ((i=0; i<total; i++)); do
+            draw_item $i
+        done
+        goto_row $((ITEMS_ROW + total + 1))
+        clear_below
+    }
+    
+    draw_header
+    draw_all
+    
+    while true; do
+        read -rsn1 key
+        
+        local prev=$current
+        
+        case "$key" in
+            q|Q) 
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
+                exit 0
+                ;; 
+            w|W) 
+                local id="${ids[$current]}"
+                if [[ "$id" == project:* ]]; then
+                    MENU_RESULT="$id"
+                    FORCE_MODE="workspace"
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    return 0
+                fi
+                ;; 
+            s|S) 
+                local id="${ids[$current]}"
+                if [[ "$id" == project:* ]]; then
+                    MENU_RESULT="$id"
+                    FORCE_MODE="simple"
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    return 0
+                fi
+                ;; 
+            ""|
+) # Enter
+                MENU_RESULT="${ids[$current]}"
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
+                return 0
+                ;; 
+            $''\x1b')
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    exit 0
+                fi
+                
+                case "$seq" in
+                    '[A') # Up
+                        while true; do
+                            ((current--))
+                            [ $current -lt 0 ] && current=$((total - 1))
+                            [ "${types[$current]}" != "separator" ] && break
+                        done
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
+                        ;; 
+                    '[B') # Down
+                        while true; do
+                            ((current++))
+                            [ $current -ge $total ] && current=0
+                            [ "${types[$current]}" != "separator" ] && break
+                        done
+                        if [ $prev -ne $current ]; then
+                            draw_item $prev
+                            draw_item $current
+                        fi
+                        ;; 
+                esac
+                ;; 
+        esac
+    done
+}
 
-# Add commands
-menu_add_separator "Commands"
-menu_add_item "cmd:setup" "Setup Wizard" "Configure projects and workspaces"
-menu_add_item "cmd:settings" "Settings" "AI tools and delegation"
-menu_add_item "cmd:add" "Add Project" "Add a new project"
-menu_add_item "cmd:list" "List Projects" "Show all registered projects"
-menu_add_item "cmd:update" "Update" "Update to latest version"
-menu_add_item "cmd:help" "Help" "Show documentation"
-
-# Run the menu (using library function)
-if ! menu_run; then
-    exit 0
-fi
+# Run the menu
+interactive_project_select
 
 # Get the selected result
 SELECTED_RESULT="$MENU_RESULT"
@@ -414,7 +589,7 @@ fi
 
 # Parse result and handle selection
 case "$SELECTED_RESULT" in
-    project:*)
+    project:*) 
         PROJECT_NAME="${SELECTED_RESULT#project:}"
         PROJECT_PATH=$(jq -r ".projects[\"$PROJECT_NAME\"].path" "$REGISTRY")
 
@@ -424,13 +599,13 @@ case "$SELECTED_RESULT" in
         fi
 
         launch_project "$PROJECT_PATH" "$FORCE_MODE"
-        ;;
+        ;; 
     cmd:setup)
         exec "$SCRIPT_DIR/setup.sh"
-        ;;
+        ;; 
     cmd:settings)
         exec "$SCRIPT_DIR/settings.sh"
-        ;;
+        ;; 
     cmd:add)
         echo ""
         read -p "Project path: " project_path
@@ -441,10 +616,10 @@ case "$SELECTED_RESULT" in
             echo "Error: Directory not found"
             exit 1
         fi
-        ;;
+        ;; 
     cmd:list)
         list_projects
-        ;;
+        ;; 
     cmd:update)
         echo ""
         echo "╔══════════════════════════════════════════════════════════════════════════════╗"
@@ -471,8 +646,8 @@ case "$SELECTED_RESULT" in
             echo "Updating via install script..."
             curl -fsSL https://raw.githubusercontent.com/malipetek/claude-workspace/main/install.sh | bash
         fi
-        ;;
+        ;; 
     cmd:help)
         show_help
-        ;;
+        ;; 
 esac
