@@ -108,8 +108,20 @@ warm_tldr_indexes() {
     [ -z "$quiet" ] && echo -e "${BLUE}Warming TLDR indexes...${NC}"
     [ -z "$quiet" ] && echo -e "${DIM}This may take a moment on first run${NC}"
 
-    # Ensure .tldrignore exists
+    # Ensure .tldrignore exists FIRST (before any tldr commands)
     ensure_tldr_ignore "$project_path"
+
+    # Also ensure .gitignore has node_modules (llm-tldr may use it)
+    ensure_gitignore_excludes "$project_path"
+
+    # Clean any existing broken indexes that include node_modules
+    if [ -d "$project_path/.tldr" ]; then
+        local bad_indexes=$(find "$project_path/.tldr" -type f -name "*.json" 2>/dev/null | xargs grep -l "node_modules" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$bad_indexes" -gt 0 ]; then
+            [ -z "$quiet" ] && echo -e "${YELLOW}Cleaning $bad_indexes corrupted indexes...${NC}"
+            rm -rf "$project_path/.tldr"
+        fi
+    fi
 
     # Run warm with timeout
     local start_time=$(date +%s)
@@ -130,6 +142,38 @@ warm_tldr_indexes() {
         [ -z "$quiet" ] && echo -e "${YELLOW}Warning: TLDR warm timed out or failed${NC}"
         return 1
     fi
+}
+
+# Ensure .gitignore has common excludes (llm-tldr respects .gitignore)
+ensure_gitignore_excludes() {
+    local project_path="$1"
+    local gitignore="$project_path/.gitignore"
+
+    local required_patterns=(
+        "node_modules"
+        "dist"
+        ".next"
+        "build"
+        "__pycache__"
+        "*.pyc"
+        "venv"
+        ".venv"
+        "target"
+        "vendor"
+    )
+
+    # Create if doesn't exist
+    if [ ! -f "$gitignore" ]; then
+        printf '%s\n' "${required_patterns[@]}" > "$gitignore"
+        return 0
+    fi
+
+    # Add missing patterns
+    for pattern in "${required_patterns[@]}"; do
+        if ! grep -qxF "$pattern" "$gitignore" 2>/dev/null; then
+            echo "$pattern" >> "$gitignore"
+        fi
+    done
 }
 
 # Ensure .tldrignore exists with sensible defaults
