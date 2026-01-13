@@ -401,9 +401,14 @@ menu_run_with_extras() {
         return 1
     fi
 
+    # Save terminal settings and set raw mode
+    local saved_stty
+    saved_stty=$(stty -g)
+    stty -echo -icanon
+
     menu_enter_alt_screen
     menu_hide_cursor
-    trap 'menu_show_cursor; menu_exit_alt_screen' EXIT
+    trap 'stty "$saved_stty"; menu_show_cursor; menu_exit_alt_screen' EXIT
 
     menu_skip_separator "down"
     menu_draw_header
@@ -417,6 +422,7 @@ menu_run_with_extras() {
         case "$key" in
             q|Q)
                 MENU_RESULT=""
+                stty "$saved_stty"
                 menu_show_cursor
                 menu_exit_alt_screen
                 trap - EXIT
@@ -427,6 +433,7 @@ menu_run_with_extras() {
                 if [[ "$id" == project:* ]]; then
                     MENU_RESULT="$id"
                     FORCE_MODE="workspace"
+                    stty "$saved_stty"
                     menu_show_cursor
                     menu_exit_alt_screen
                     trap - EXIT
@@ -438,6 +445,7 @@ menu_run_with_extras() {
                 if [[ "$id" == project:* ]]; then
                     MENU_RESULT="$id"
                     FORCE_MODE="simple"
+                    stty "$saved_stty"
                     menu_show_cursor
                     menu_exit_alt_screen
                     trap - EXIT
@@ -446,6 +454,7 @@ menu_run_with_extras() {
                 ;;
             "")  # Enter
                 MENU_RESULT="${MENU_IDS[$MENU_SELECTED]}"
+                stty "$saved_stty"
                 menu_show_cursor
                 menu_exit_alt_screen
                 trap - EXIT
@@ -457,6 +466,7 @@ menu_run_with_extras() {
                 if [ -z "$seq" ]; then
                     # Just escape, quit
                     MENU_RESULT=""
+                    stty "$saved_stty"
                     menu_show_cursor
                     menu_exit_alt_screen
                     trap - EXIT
