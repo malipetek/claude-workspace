@@ -104,24 +104,27 @@ update_workspace_instructions() {
     local project_path="$1"
     local project_name=$(basename "$project_path")
     local claude_md="$project_path/CLAUDE.md"
-    local marker="## Workspace Dev Processes"
+    # Match the actual header in the generated content
+    local marker="## ⚠️ REQUIRED: Workspace Dev Process Integration"
 
     # Generate instructions
     local instructions
     instructions=$(generate_dev_process_instructions "$project_name")
 
     if [ -f "$claude_md" ]; then
-        # Check if already has workspace section
-        if grep -q "$marker" "$claude_md"; then
-            # Replace existing section
+        # Check if already has workspace section (check for marker or old marker)
+        if grep -q "Workspace Dev Process" "$claude_md"; then
+            # Replace existing section - remove ALL workspace sections first
             local temp
             temp=$(mktemp)
-            awk -v marker="$marker" -v new="$instructions" '
+            awk '
                 BEGIN { skip=0 }
-                $0 ~ marker { skip=1; print new; next }
+                /## .*Workspace Dev Process/ { skip=1; next }
                 skip && /^## / { skip=0 }
                 !skip { print }
             ' "$claude_md" > "$temp" && mv "$temp" "$claude_md"
+            # Now append fresh instructions
+            echo "$instructions" >> "$claude_md"
         else
             # Append to existing file
             echo "$instructions" >> "$claude_md"

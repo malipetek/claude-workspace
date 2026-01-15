@@ -163,34 +163,25 @@ else
     CONFIG="{}"
 fi
 
-# TLDR Integration
+# TLDR Integration - use the user-friendly setup script
 if [ -f "$CONFIG_FILE" ]; then
     TLDR_ENABLED=$(echo "$CONFIG" | jq -r '.tldr.enabled // false')
 
     if [ "$TLDR_ENABLED" = "true" ]; then
-        echo ""
-        echo "TLDR Code Analysis"
-
-        # Warm indexes if enabled
-        if type warm_tldr_indexes &>/dev/null; then
-            warm_tldr_indexes "$PROJECT_PATH"
-
-            # Configure MCP if enabled
-            if type configure_tldr_mcp &>/dev/null; then
-                configure_tldr_mcp "$PROJECT_PATH"
-            fi
-
-            # Update CLAUDE.md if needed
-            if type update_project_claude_md &>/dev/null; then
-                CLAUDE_MD="$PROJECT_PATH/CLAUDE.md"
-                if [ ! -f "$CLAUDE_MD" ] || ! grep -q "TLDR Code Analysis" "$CLAUDE_MD" 2>/dev/null; then
-                    update_project_claude_md "$PROJECT_PATH"
-                fi
-            fi
+        if [ -x "$SCRIPT_DIR/tldr-setup.sh" ]; then
+            "$SCRIPT_DIR/tldr-setup.sh" "$PROJECT_PATH"
         else
-            echo "  Warning: TLDR library not loaded"
+            echo ""
+            echo "TLDR Code Analysis"
+            # Fallback to library functions
+            if type warm_tldr_indexes &>/dev/null; then
+                warm_tldr_indexes "$PROJECT_PATH"
+                [ type configure_tldr_mcp &>/dev/null ] && configure_tldr_mcp "$PROJECT_PATH"
+            else
+                echo "  Warning: TLDR not available"
+            fi
+            echo ""
         fi
-        echo ""
     fi
 fi
 

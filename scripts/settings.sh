@@ -668,6 +668,7 @@ configure_tldr_settings() {
     local default_enabled=$(jq -r '.tldr.defaultEnabled // false' "$SETTINGS_FILE" 2>/dev/null)
     local default_auto_warm=$(jq -r '.tldr.defaultAutoWarm // true' "$SETTINGS_FILE" 2>/dev/null)
     local warm_timeout=$(jq -r '.tldr.warmTimeout // 300' "$SETTINGS_FILE" 2>/dev/null)
+    local embedding_model=$(jq -r '.tldr.embeddingModel // "BAAI/bge-base-en-v1.5"' "$SETTINGS_FILE" 2>/dev/null)
 
     echo ""
     echo -e "${BLUE}Default Settings for New Projects${NC}"
@@ -700,13 +701,34 @@ configure_tldr_settings() {
     read -p "  Warm timeout in seconds [$warm_timeout]: " new_timeout
     [ -n "$new_timeout" ] && warm_timeout="$new_timeout"
 
+    # Embedding model selection
+    echo ""
+    echo -e "${BLUE}Embedding Model for Semantic Search${NC}"
+    echo ""
+    echo -e "  Current model: ${CYAN}$embedding_model${NC}"
+    echo ""
+    echo -e "  ${BOLD}1)${NC} BAAI/bge-base-en-v1.5 ${DIM}(440MB - Best balance, recommended)${NC}"
+    echo -e "  ${BOLD}2)${NC} BAAI/bge-large-en-v1.5 ${DIM}(1.3GB - Highest quality)${NC}"
+    echo -e "  ${BOLD}3)${NC} sentence-transformers/all-mpnet-base-v2 ${DIM}(420MB - Good general)${NC}"
+    echo -e "  ${BOLD}4)${NC} sentence-transformers/all-MiniLM-L6-v2 ${DIM}(80MB - Fastest)${NC}"
+    echo ""
+    read -p "  Select model [1-4, Enter to keep current]: " model_choice
+
+    case "$model_choice" in
+        1) embedding_model="BAAI/bge-base-en-v1.5" ;;
+        2) embedding_model="BAAI/bge-large-en-v1.5" ;;
+        3) embedding_model="sentence-transformers/all-mpnet-base-v2" ;;
+        4) embedding_model="sentence-transformers/all-MiniLM-L6-v2" ;;
+    esac
+
     # Save settings
     local temp=$(mktemp)
     jq ".tldr = {
         \"installed\": $tldr_installed,
         \"defaultEnabled\": $default_enabled,
         \"defaultAutoWarm\": $default_auto_warm,
-        \"warmTimeout\": $warm_timeout
+        \"warmTimeout\": $warm_timeout,
+        \"embeddingModel\": \"$embedding_model\"
     }" "$SETTINGS_FILE" > "$temp" && mv "$temp" "$SETTINGS_FILE"
 
     echo ""
@@ -761,20 +783,36 @@ EOF
 
     # Generate based on level
     cat > "$CLAUDE_MD" << EOF
-# AI Delegation Instructions
+# ⚡ AI Delegation Instructions
 
-You have access to a multi-AI delegation system. Use it to delegate tasks to other AI models while you focus on complex work.
+**YOU MUST ACTIVELY DELEGATE TASKS** to other AI models. This is not optional - delegation is a core feature of this workspace.
 
 **Current Strategy: ${level_name} (Level ${level}/4)**
+
+## 🔴 REQUIRED: Delegation Behavior
+
+When you receive a task, **ALWAYS ASK YOURSELF**:
+1. Can part of this be delegated? → If yes, DELEGATE IT
+2. Is this a routine implementation task? → DELEGATE IT
+3. Am I doing work that another AI could handle? → DELEGATE IT
+
+**Do NOT do everything yourself.** Your role is to architect, review, and integrate.
 
 ## Available AI Tools
 
 $(echo -e "$tool_list")
 
-## Delegation Script
+## Delegation Commands
 
 \`\`\`bash
-~/.claude-workspace/scripts/delegate.sh <ai_name> <task_description> <project_path>
+# Delegate a task (async recommended)
+~/.claude-workspace/scripts/delegate-async.sh <ai_name> "<task description>" <project_path>
+
+# Check task status
+~/.claude-workspace/scripts/check-status.sh <task_id>
+
+# Check if AI CLI is authenticated
+~/.claude-workspace/scripts/check-auth.sh <ai_name>
 \`\`\`
 
 EOF
@@ -785,19 +823,15 @@ EOF
             cat >> "$CLAUDE_MD" << 'EOF'
 ## Delegation Strategy: Minimal
 
-Only delegate simple, well-defined tasks:
+**DELEGATE these tasks** (don't do them yourself):
+- 📋 Research and summarization of large files
+- 📖 Documentation lookups
+- 🔍 Gathering information from codebases
 
-**Delegate:**
-- Research and summarization of large files
-- Simple documentation lookups
-- Gathering information from codebases
-
-**Keep for yourself (Claude):**
-- All code writing and modifications
+**Keep for yourself:**
+- Code writing and modifications
 - Architecture decisions
 - Bug fixes and debugging
-- Code review
-- Any task requiring judgment
 
 EOF
             ;;
@@ -805,24 +839,19 @@ EOF
             cat >> "$CLAUDE_MD" << 'EOF'
 ## Delegation Strategy: Moderate
 
-Delegate routine implementation tasks:
+**DELEGATE these tasks** (actively look for opportunities):
+- 📋 Research and summarization
+- 📝 Type/interface generation from schemas
+- 🧪 Unit tests for pure functions
+- 🔧 Simple utility functions
+- 📖 Documentation and JSDoc comments
+- 🏗️ Boilerplate components
+- 💾 CRUD operations
 
-**Delegate:**
-- Research and summarization
-- Type/interface generation from schemas
-- Unit tests for pure functions
-- Simple utility functions
-- Documentation and JSDoc comments
-- Boilerplate components
-- CRUD operations
-
-**Keep for yourself (Claude):**
-- Architecture decisions and system design
+**Keep for yourself:**
+- Architecture decisions
 - Complex business logic
-- Debugging and troubleshooting
 - Security-sensitive code
-- Code review and integration
-- Cross-cutting concerns
 
 EOF
             ;;
@@ -830,25 +859,24 @@ EOF
             cat >> "$CLAUDE_MD" << 'EOF'
 ## Delegation Strategy: Aggressive
 
-Delegate most implementation, focus on review and architecture:
+**ACTIVELY DELEGATE most work**. Your job is to architect and review.
 
-**Delegate:**
-- Most feature implementation
-- Component development
-- API endpoint creation
-- Database queries and migrations
-- Test writing (unit, integration)
-- Documentation
-- Refactoring tasks
-- Bug fixes with clear reproduction steps
+**DELEGATE these tasks** (this is your default action):
+- 🚀 Feature implementation → DELEGATE
+- 🏗️ Component development → DELEGATE
+- 🔌 API endpoint creation → DELEGATE
+- 💾 Database queries/migrations → DELEGATE
+- 🧪 Test writing (unit, integration) → DELEGATE
+- 📖 Documentation → DELEGATE
+- 🔄 Refactoring tasks → DELEGATE
+- 🐛 Bug fixes with clear steps → DELEGATE
 
-**Keep for yourself (Claude):**
+**Only keep:**
 - Architecture decisions
 - Security review
-- Performance optimization strategy
-- Final code review and approval
-- Complex algorithmic problems
-- Integration of delegated work
+- Final code review
+
+**Your workflow: Delegate → Review → Integrate**
 
 EOF
             ;;
@@ -856,33 +884,30 @@ EOF
             cat >> "$CLAUDE_MD" << 'EOF'
 ## Delegation Strategy: Orchestrator
 
-Claude acts as architect and reviewer, delegating almost everything:
+**YOU ARE THE ORCHESTRATOR**. Delegate EVERYTHING except architecture and review.
 
-**Delegate:**
+**Your ONLY jobs:**
+1. 📋 Break down tasks into delegatable pieces
+2. 📤 Assign to AI tools
+3. ✅ Review completed work
+4. 🔗 Integrate and verify
+
+**DELEGATE ALL:**
 - All feature implementation
 - All component development
 - All tests and documentation
-- Bug fixes
-- Refactoring
-- Code organization
-- API development
-- Database work
+- All bug fixes
+- All refactoring
+- All API/database work
 
-**Keep for yourself (Claude):**
-- High-level architecture planning
-- Task breakdown and delegation
-- Code review of delegated work
-- Integration decisions
-- Security audit
-- Performance review
-- Final approval
+**Workflow (follow this strictly):**
+1. User gives task → Break into subtasks
+2. For each subtask → Delegate to an AI
+3. Continue with other subtasks (don't wait)
+4. Check status periodically
+5. Review and integrate when complete
 
-**Workflow:**
-1. Break down user requests into delegatable tasks
-2. Assign tasks to appropriate AI tools
-3. Review completed work
-4. Integrate and verify
-5. Handle any issues that arise
+**You should be delegating 80%+ of implementation work.**
 
 EOF
             ;;
@@ -890,29 +915,35 @@ EOF
 
     # Add common sections
     cat >> "$CLAUDE_MD" << 'EOF'
-## Async Delegation (Recommended)
+## ✅ How to Delegate (Step by Step)
 
-Use async delegation to continue working while other AIs handle tasks:
+1. **Identify delegatable work** - implementation, tests, docs, research
+2. **Formulate clear task** - be specific about what you want
+3. **Run delegation command**:
+   ```bash
+   ~/.claude-workspace/scripts/delegate-async.sh gemini "Write unit tests for src/utils.ts" .
+   ```
+4. **Continue your work** - don't wait, do other tasks
+5. **Check status when needed**:
+   ```bash
+   ~/.claude-workspace/scripts/check-status.sh running
+   ```
+6. **Review completed work** - integrate or request changes
 
-```bash
-# Check CLI auth status first
-~/.claude-workspace/scripts/check-auth.sh <ai_name>
+## Quality Checklist (After Delegation)
 
-# Delegate async
-~/.claude-workspace/scripts/delegate-async.sh <ai_name> <task_description> <project_path>
+When delegated work returns, verify:
+- ✅ Code compiles without errors
+- ✅ Follows project conventions
+- ✅ No security issues
+- ✅ Tests pass
+- ✅ No over-engineering
 
-# Check status
-~/.claude-workspace/scripts/check-status.sh <task_id>
-```
+## 🚫 DON'T Do This
 
-## Quality Checklist
-
-After receiving delegated work, verify:
-- Code compiles without errors
-- Follows project conventions
-- No security issues
-- Tests pass
-- No over-engineering
+- ❌ Don't write all the code yourself when delegation is configured
+- ❌ Don't forget to check delegation status
+- ❌ Don't skip reviewing delegated work
 
 ---
 *Generated by Claude Workspace. Run `claude-workspace settings` to adjust.*

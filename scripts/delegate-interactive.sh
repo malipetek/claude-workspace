@@ -61,14 +61,23 @@ get_tldr_context() {
         return
     fi
 
-    # Try to get semantic search results for the task
-    local search_results
-    search_results=$(cd "$project" && tldr semantic "$task" --limit 5 2>/dev/null | head -50)
+    local search_results=""
+
+    # Try semantic search first (if index exists)
+    if [ -f "$project/.tldr/cache/semantic/index.faiss" ]; then
+        search_results=$(cd "$project" && timeout 10 tldr semantic search "$task" --limit 5 2>/dev/null | head -50)
+    fi
+
+    # Fall back to structure/tree if semantic not available
+    if [ -z "$search_results" ]; then
+        # Get code structure overview
+        search_results=$(cd "$project" && timeout 10 tldr structure 2>/dev/null | head -80)
+    fi
 
     if [ -n "$search_results" ]; then
         context="
 
-## Relevant Code Context (from TLDR semantic search)
+## Relevant Code Context (from codebase analysis)
 
 \`\`\`
 $search_results
