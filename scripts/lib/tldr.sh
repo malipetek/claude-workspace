@@ -138,11 +138,14 @@ warm_tldr_indexes() {
         fi
     fi
 
-    # Detect project language
+    # Detect project language (with monorepo support)
     local lang_flag=""
-    if [ -f "$project_path/tsconfig.json" ] || ls "$project_path"/*.ts &>/dev/null 2>&1; then
+    local has_ts_files=$(find "$project_path" -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | head -1)
+    local has_tsconfig=$(find "$project_path" -name "tsconfig.json" -not -path "*/node_modules/*" 2>/dev/null | head -1)
+
+    if [ -f "$project_path/tsconfig.json" ] || [ -n "$has_tsconfig" ] || [ -n "$has_ts_files" ]; then
         lang_flag="--lang typescript"
-    elif [ -f "$project_path/package.json" ] && ! [ -f "$project_path/tsconfig.json" ]; then
+    elif [ -f "$project_path/package.json" ]; then
         lang_flag="--lang javascript"
     elif [ -f "$project_path/setup.py" ] || [ -f "$project_path/pyproject.toml" ]; then
         lang_flag="--lang python"

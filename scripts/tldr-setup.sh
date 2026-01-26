@@ -91,18 +91,26 @@ echo -e "${BLUE}[2/6]${NC} Detecting project language..."
 LANG_FLAG=""
 LANG_NAME=""
 
+# Helper: check for TypeScript files anywhere (excluding node_modules)
+has_typescript_files() {
+    find "$PROJECT_PATH" -name "*.ts" -o -name "*.tsx" 2>/dev/null | grep -v node_modules | head -1 | grep -q .
+}
+
+# Helper: check for tsconfig anywhere (monorepo support)
+has_tsconfig() {
+    find "$PROJECT_PATH" -name "tsconfig.json" -not -path "*/node_modules/*" 2>/dev/null | head -1 | grep -q .
+}
+
 if [ -f "$PROJECT_PATH/tsconfig.json" ]; then
     LANG_FLAG="--lang typescript"
     LANG_NAME="TypeScript"
+elif has_tsconfig || has_typescript_files; then
+    # Monorepo or project with TS files but no root tsconfig
+    LANG_FLAG="--lang typescript"
+    LANG_NAME="TypeScript (monorepo)"
 elif [ -f "$PROJECT_PATH/package.json" ]; then
-    # Check if it has TypeScript files
-    if ls "$PROJECT_PATH/src"/*.ts &>/dev/null 2>&1 || ls "$PROJECT_PATH"/*.ts &>/dev/null 2>&1; then
-        LANG_FLAG="--lang typescript"
-        LANG_NAME="TypeScript"
-    else
-        LANG_FLAG="--lang javascript"
-        LANG_NAME="JavaScript"
-    fi
+    LANG_FLAG="--lang javascript"
+    LANG_NAME="JavaScript"
 elif [ -f "$PROJECT_PATH/setup.py" ] || [ -f "$PROJECT_PATH/pyproject.toml" ] || [ -f "$PROJECT_PATH/requirements.txt" ]; then
     LANG_FLAG="--lang python"
     LANG_NAME="Python"
