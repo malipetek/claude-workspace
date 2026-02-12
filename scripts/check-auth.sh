@@ -29,10 +29,11 @@ check_gemini() {
     return 0
 }
 
-check_zai() {
+check_opencode() {
     # Check if opencode CLI exists
     if ! command -v opencode &> /dev/null; then
         echo "ERROR: opencode CLI not found"
+        echo "Install from: https://github.com/z-ai/opencode"
         return 2
     fi
 
@@ -41,12 +42,40 @@ check_zai() {
 
     # Check for common auth-required patterns
     if echo "$OUTPUT" | grep -qi "login\|authenticate\|sign in\|authorization\|credentials\|token expired\|unauthorized\|api key"; then
-        echo "AUTH_REQUIRED: Z.ai (opencode) CLI needs authentication"
+        echo "AUTH_REQUIRED: OpenCode CLI needs authentication"
         echo "Run 'opencode' manually in terminal to complete login"
         return 1
     fi
 
-    echo "OK: Z.ai (opencode) CLI authenticated"
+    echo "OK: OpenCode CLI authenticated"
+    return 0
+}
+
+check_zai() {
+    # Alias for opencode
+    check_opencode
+    return $?
+}
+
+check_codex() {
+    # Check if codex CLI exists
+    if ! command -v codex &> /dev/null; then
+        echo "ERROR: codex CLI not found"
+        echo "Install with: npm install -g @openai/codex-cli or similar"
+        return 2
+    fi
+
+    # Try a simple command to check auth status
+    OUTPUT=$(echo "echo test" | timeout 10 codex 2>&1)
+
+    # Check for common auth-required patterns
+    if echo "$OUTPUT" | grep -qi "login\|authenticate\|sign in\|authorization\|credentials\|token expired\|unauthorized\|api key"; then
+        echo "AUTH_REQUIRED: Codex CLI needs authentication"
+        echo "Run 'codex' manually in terminal to complete login or set OPENAI_API_KEY"
+        return 1
+    fi
+
+    echo "OK: Codex CLI authenticated"
     return 0
 }
 
@@ -55,8 +84,16 @@ case $AI_NAME in
         check_gemini
         exit $?
         ;;
+    opencode)
+        check_opencode
+        exit $?
+        ;;
     zai)
         check_zai
+        exit $?
+        ;;
+    codex)
+        check_codex
         exit $?
         ;;
     all)
@@ -66,12 +103,16 @@ case $AI_NAME in
         check_gemini
         GEMINI_STATUS=$?
         echo ""
-        echo "Z.ai (opencode):"
-        check_zai
-        ZAI_STATUS=$?
+        echo "OpenCode:"
+        check_opencode
+        OPENCODE_STATUS=$?
+        echo ""
+        echo "Codex:"
+        check_codex
+        CODEX_STATUS=$?
         echo ""
 
-        if [ $GEMINI_STATUS -ne 0 ] || [ $ZAI_STATUS -ne 0 ]; then
+        if [ $GEMINI_STATUS -ne 0 ] || [ $OPENCODE_STATUS -ne 0 ] || [ $CODEX_STATUS -ne 0 ]; then
             echo "=== Some CLIs need attention ==="
             exit 1
         fi
@@ -79,7 +120,7 @@ case $AI_NAME in
         exit 0
         ;;
     *)
-        echo "Usage: ./check-auth.sh <gemini|zai|all>"
+        echo "Usage: ./check-auth.sh <gemini|opencode|codex|zai|all>"
         exit 1
         ;;
 esac

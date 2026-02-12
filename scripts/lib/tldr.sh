@@ -460,6 +460,20 @@ generate_tldr_instructions() {
 - ❌ Don't grep for code patterns - use \`tldr - search\`
 - ❌ Don't modify functions without checking callers - use \`tldr - impact\`
 
+### ⚠️ Known Limitations & Workarounds
+
+| Issue | Workaround |
+|-------|------------|
+| **Search fails / JSON error** | Add \`--max 50\` flag: \`tldr - search "pattern" ./src --max 50\` |
+| **Semantic index not found** | Semantic may not have built - use \`tldr - search\` instead |
+| **Search includes lock files** | Specify subdirectory: \`tldr - search "query" ./src\` |
+| **Empty class/import results** | TypeScript parsing limited - use \`tldr - extract\` on specific files |
+
+**For monorepos/large projects:**
+- Always specify a subdirectory: \`tldr - search "pattern" ./src\`
+- Use \`--max 50\` to limit results
+- Use \`--ext .ts .tsx\` to filter by extension
+
 ### Why TLDR?
 
 - **95% fewer tokens** - structured summaries instead of raw code

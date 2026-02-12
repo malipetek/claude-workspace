@@ -8,11 +8,12 @@ A workspace manager for [Claude Code](https://claude.ai/code) that supercharges 
 
 ## Features
 
-- **Split-Pane Workspaces** — Launch Claude Code alongside your dev processes in Ghostty split panes
-- **Dev Log Monitoring** — Claude can check your dev process output instead of running redundant builds
-- **Auto Cleanup** — Dev processes automatically terminate when Claude exits
+- **Choose Your AI Assistant** — Use Claude, Gemini, OpenCode, Codex, or Aider as your main coding tool
+- **Split-Pane Workspaces** — Launch your AI assistant alongside dev processes in Ghostty split panes
+- **Dev Log Monitoring** — Your AI can check dev process output instead of running redundant builds
+- **Auto Cleanup** — Dev processes automatically terminate when your AI assistant exits
 - **Project Registry** — Quick-switch between projects with an interactive menu
-- **Multi-AI Delegation** — Optionally delegate simple tasks to Gemini or other AI models
+- **Multi-AI Delegation** — Delegate tasks to multiple AI models simultaneously
 
 ## Quick Start
 
@@ -102,6 +103,38 @@ Claude exited. Cleaning up workspace...
   ✓ backend stopped
 ✓ Cleanup complete
 ```
+
+## Choosing Your Main Coding AI
+
+Claude Workspace supports multiple AI coding assistants. You can choose which one to use as your primary tool:
+
+### Available AI Assistants
+
+| Tool | Description | Best For |
+|------|-------------|----------|
+| **Claude Code** | Anthropic's coding assistant (default) | General coding, architecture, complex tasks |
+| **Gemini** | Google's Gemini AI | Fast iteration, broad knowledge |
+| **OpenCode** | Z.ai's coding assistant | Code generation, implementation |
+| **Codex** | OpenAI's code model | Code completion, simple tasks |
+| **Aider** | AI pair programming tool | Interactive development, refactoring |
+
+### How to Change Your Main AI
+
+Run the settings wizard:
+
+```bash
+claude-workspace setup
+# Then select: AI Settings → Main Coding Tool
+```
+
+Or use the settings command directly:
+
+```bash
+~/.claude-workspace/scripts/settings.sh
+# Select: Main Coding Tool
+```
+
+Your selected AI will be used in the workspace split-pane layout. The workspace will automatically use the chosen AI when you launch a project.
 
 ## Configuration
 
@@ -202,9 +235,12 @@ Create this file in your project root:
 - **[Ghostty](https://ghostty.org/)** — Fast, native terminal with split panes
 - **Accessibility Permissions** — Required for Ghostty automation
 
-### Optional
+### Optional (for AI Delegation)
 
-- **[Gemini CLI](https://github.com/google/generative-ai-cli)** — For AI delegation features
+- **[Gemini CLI](https://github.com/google/generative-ai-cli)** — Google's Gemini AI
+- **[OpenCode](https://github.com/z-ai/opencode)** — Z.ai's coding assistant
+- **[Codex](https://openai.com/blog/openai-codex)** — OpenAI's code model
+- **[Aider](https://github.com/paul-gauthier/aider)** — AI pair programming
 
 ## Ghostty Permissions
 
@@ -257,20 +293,51 @@ ws <path>            # Short alias for workspace
 
 ## Multi-AI Delegation (Advanced)
 
-Claude Workspace can delegate simple tasks to other AI models:
+Your main AI assistant can delegate tasks to other AI models. This is different from the main coding tool - your primary AI remains in control but can parallelize work by delegating specific tasks.
+
+### Delegation vs Main Coding Tool
+
+- **Main Coding Tool**: The AI you interact with directly in the workspace
+- **Delegation**: Your main AI assigns sub-tasks to other AIs to work in parallel
+
+For example, you can use Claude as your main AI, and Claude can delegate test writing to Gemini while it focuses on architecture.
 
 ```bash
 # Delegate to Gemini
 ~/.claude-workspace/scripts/delegate-async.sh gemini \
   "Generate TypeScript interfaces for the User API" \
   /path/to/project
+
+# Delegate to OpenCode
+~/.claude-workspace/scripts/delegate-async.sh opencode \
+  "Implement authentication middleware" \
+  /path/to/project
+
+# Delegate to Codex
+~/.claude-workspace/scripts/delegate-async.sh codex \
+  "Write unit tests for the API endpoints" \
+  /path/to/project
+
+# Check authentication status
+~/.claude-workspace/scripts/check-auth.sh all
 ```
+
+### Available AI Models
+
+| Tool | Best For | Auth Method |
+|------|----------|-------------|
+| `gemini` | General coding, refactoring | CLI login |
+| `opencode` | Code generation, implementation | API key |
+| `codex` | Code completion, simple tasks | OpenAI API key |
+| `aider` | Pair programming, complex tasks | OpenAI API key |
 
 This is useful for:
 - Type generation
 - Boilerplate code
-- Simple tests
+- Unit tests
 - Documentation
+- Feature implementation
+- Code refactoring
 
 ## Troubleshooting
 

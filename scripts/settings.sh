@@ -77,6 +77,7 @@ exit_alt_screen() {
 
 # Default settings
 DEFAULT_SETTINGS='{
+  "main_coding_tool": "claude",
   "delegation": {
     "level": 2,
     "levels": {
@@ -90,6 +91,7 @@ DEFAULT_SETTINGS='{
     "use_branches": true
   },
   "ai_tools": {
+    "claude": {"enabled": true, "command": "claude", "name": "Claude Code", "installed": true},
     "gemini": {"enabled": false, "command": "gemini", "name": "Gemini CLI", "installed": false},
     "opencode": {"enabled": false, "command": "opencode", "name": "OpenCode", "installed": false},
     "codex": {"enabled": false, "command": "codex", "name": "OpenAI Codex", "installed": false},
@@ -112,6 +114,21 @@ init_settings() {
 
     if [ ! -f "$SETTINGS_FILE" ]; then
         echo "$DEFAULT_SETTINGS" | jq '.' > "$SETTINGS_FILE"
+    else
+        # Migrate existing settings to add new fields
+        local temp=$(mktemp)
+
+        # Add main_coding_tool if missing
+        if ! jq -e '.main_coding_tool' "$SETTINGS_FILE" &>/dev/null; then
+            jq '. + {"main_coding_tool": "claude"}' "$SETTINGS_FILE" > "$temp"
+            mv "$temp" "$SETTINGS_FILE"
+        fi
+
+        # Add claude to ai_tools if missing
+        if ! jq -e '.ai_tools.claude' "$SETTINGS_FILE" &>/dev/null; then
+            jq '.ai_tools.claude = {"enabled": true, "command": "claude", "name": "Claude Code", "installed": true}' "$SETTINGS_FILE" > "$temp"
+            mv "$temp" "$SETTINGS_FILE"
+        fi
     fi
 
     # Detect installed tools
@@ -120,7 +137,7 @@ init_settings() {
 
 # Detect which AI tools are installed
 detect_installed_tools() {
-    local tools=("gemini" "opencode" "codex" "aider" "continue")
+    local tools=("claude" "gemini" "opencode" "codex" "aider" "continue")
     local temp=$(mktemp)
 
     cp "$SETTINGS_FILE" "$temp"
@@ -435,6 +452,198 @@ configure_ai_tools() {
                 if [ $prev -ne $current ]; then
                     draw_tool_item $prev
                     draw_tool_item $current
+                fi
+                ;;
+        esac
+    done
+}
+
+# Configure main coding tool
+configure_main_coding_tool() {
+    # Get available tools
+    local tools=($(jq -r '.ai_tools | keys[]' "$SETTINGS_FILE"))
+    local total=${#tools[@]}
+    local ITEMS_ROW=7  # Row where items start
+
+    # Get current main tool
+    local current_main=$(jq -r '.main_coding_tool // "claude"' "$SETTINGS_FILE")
+    local current=0
+
+    # Pre-load tool data and find current selection
+    local tool_names=() tool_cmds=() tool_installed=()
+    for ((i=0; i<total; i++)); do
+        local tool="${tools[$i]}"
+        tool_names[$i]=$(jq -r ".ai_tools.$tool.name" "$SETTINGS_FILE")
+        tool_cmds[$i]=$(jq -r ".ai_tools.$tool.command" "$SETTINGS_FILE")
+        tool_installed[$i]=$(jq -r ".ai_tools.$tool.installed" "$SETTINGS_FILE")
+
+        # Set current if this is the main tool
+        [ "$tool" = "$current_main" ] && current=$i
+    done
+
+    enter_alt_screen
+    hide_cursor
+    trap 'show_cursor; exit_alt_screen' EXIT
+
+    # Draw static header
+    draw_static() {
+        goto_row 1
+        echo ""
+        echo -e "    ${TEXT}${BOLD}Main Coding Tool${NC}                                                          ${TEXT_MUTED}esc${NC}"
+        echo ""
+        echo -e "    ${TEXT_MUTED}Select which AI assistant to use for coding${NC}"
+        echo ""
+        echo -e "    ${ACCENT}${BOLD}Available Tools${NC}"
+    }
+
+    # Draw a single tool item
+    draw_tool_item() {
+        local i=$1
+        local row=$((ITEMS_ROW + i))
+
+        local tool="${tools[$i]}"
+        local radio="○"
+        local status=""
+
+        if [ "$tool" = "$current_main" ]; then
+            radio="${SUCCESS}◉${NC}"
+        fi
+
+        if [ "${tool_installed[$i]}" = "true" ]; then
+            status="installed"
+        else
+            status="not found"
+        fi
+
+        goto_row $row
+        clear_line
+        if [ $i -eq $current ]; then
+            echo -e "    ${PRIMARY_BG}${PRIMARY_FG}${BOLD} $radio ${tool_names[$i]} ${NC}${PRIMARY_BG}${PRIMARY_FG} ${status} ${NC}"
+        else
+            echo -e "     $radio ${TEXT}${tool_names[$i]}${NC} ${TEXT_MUTED}${status}${NC}"
+        fi
+    }
+
+    # Draw all tools
+    draw_all_tools() {
+        for ((i=0; i<total; i++)); do
+            draw_tool_item $i
+        done
+    }
+
+    # Draw help text
+    draw_footer() {
+        goto_row $((ITEMS_ROW + total + 2))
+        clear_line
+        echo -e "    ${TEXT_MUTED}Current: ${tool_names[$current]} · Press Enter to select${NC}"
+    }
+
+    # Initial draw
+    draw_static
+    draw_all_tools
+    draw_footer
+
+    while true; do
+        IFS= read -rsn1 key
+        local prev=$current
+
+        case "$key" in
+            q|Q)
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
+                return 1
+                ;;
+            "")  # Enter - select current tool
+                local selected_tool="${tools[$current]}"
+
+                # Check if tool is installed
+                if [ "${tool_installed[$current]}" != "true" ]; then
+                    goto_row $((ITEMS_ROW + total + 4))
+                    clear_below
+                    show_cursor
+                    echo ""
+                    echo -e "    ${WARNING}Warning:${NC} ${tool_names[$current]} is not installed"
+                    echo ""
+                    read -p "    Select anyway? [y/N] " -n 1 -r
+                    echo
+                    hide_cursor
+
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        draw_static
+                        draw_all_tools
+                        draw_footer
+                        continue
+                    fi
+                fi
+
+                # Save selection
+                local temp=$(mktemp)
+                jq ".main_coding_tool = \"$selected_tool\"" "$SETTINGS_FILE" > "$temp"
+                mv "$temp" "$SETTINGS_FILE"
+                current_main="$selected_tool"
+
+                show_cursor
+                exit_alt_screen
+                trap - EXIT
+                return 0
+                ;;
+            " ")  # Space - same as Enter for radio buttons
+                local selected_tool="${tools[$current]}"
+
+                # Check if tool is installed
+                if [ "${tool_installed[$current]}" != "true" ]; then
+                    goto_row $((ITEMS_ROW + total + 4))
+                    clear_below
+                    show_cursor
+                    echo ""
+                    echo -e "    ${WARNING}Warning:${NC} ${tool_names[$current]} is not installed"
+                    echo ""
+                    read -p "    Select anyway? [y/N] " -n 1 -r
+                    echo
+                    hide_cursor
+
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        draw_static
+                        draw_all_tools
+                        draw_footer
+                        continue
+                    fi
+                fi
+
+                # Save selection
+                local temp=$(mktemp)
+                jq ".main_coding_tool = \"$selected_tool\"" "$SETTINGS_FILE" > "$temp"
+                mv "$temp" "$SETTINGS_FILE"
+                current_main="$selected_tool"
+
+                # Redraw to show new selection
+                draw_all_tools
+                draw_footer
+                ;;
+            $'\x1b')
+                read -rsn2 -t 1 seq
+                if [ -z "$seq" ]; then
+                    # Just escape
+                    show_cursor
+                    exit_alt_screen
+                    trap - EXIT
+                    return 1
+                fi
+                case "$seq" in
+                    '[A')  # Up
+                        ((current--))
+                        [ $current -lt 0 ] && current=$((total - 1))
+                        ;;
+                    '[B')  # Down
+                        ((current++))
+                        [ $current -ge $total ] && current=0
+                        ;;
+                esac
+                if [ $prev -ne $current ]; then
+                    draw_tool_item $prev
+                    draw_tool_item $current
+                    draw_footer
                 fi
                 ;;
         esac
@@ -958,6 +1167,14 @@ show_settings() {
     echo -e "    ${TEXT}${BOLD}Current Settings${NC}"
     echo ""
 
+    # Main coding tool
+    local main_tool=$(jq -r '.main_coding_tool // "claude"' "$SETTINGS_FILE")
+    local main_tool_name=$(jq -r ".ai_tools.$main_tool.name // \"$main_tool\"" "$SETTINGS_FILE")
+
+    echo -e "    ${ACCENT}${BOLD}Main Coding Tool${NC}"
+    echo -e "     ${TEXT}$main_tool_name${NC}"
+    echo ""
+
     local level=$(get_delegation_level)
     local level_name=$(get_delegation_name)
     local level_desc=$(jq -r ".delegation.levels[\"$level\"].description" "$SETTINGS_FILE")
@@ -999,8 +1216,9 @@ show_settings() {
 # Main settings menu - polished style
 main_menu() {
     # Menu items: id, label, description
-    local -a menu_ids=("delegation" "tools" "custom" "behavior" "tldr" "apply" "show" "reset" "done")
+    local -a menu_ids=("main_tool" "delegation" "tools" "custom" "behavior" "tldr" "apply" "show" "reset" "done")
     local -a menu_labels=(
+        "Main Coding Tool"
         "Delegation Level"
         "AI Tools"
         "Add Custom Tool"
@@ -1012,6 +1230,7 @@ main_menu() {
         "Done"
     )
     local -a menu_descs=(
+        "Choose your primary AI assistant"
         "Set how much Claude delegates"
         "Enable/disable AI tools"
         "Add a custom command"
@@ -1032,6 +1251,8 @@ main_menu() {
 
     # Draw static header with current config
     draw_header() {
+        local main_tool=$(jq -r '.main_coding_tool // "claude"' "$SETTINGS_FILE")
+        local main_tool_name=$(jq -r ".ai_tools.$main_tool.name // \"$main_tool\"" "$SETTINGS_FILE" | awk '{print $1}')
         local level=$(get_delegation_level)
         local level_name=$(get_delegation_name)
         local enabled_count=$(jq '[.ai_tools[] | select(.enabled == true)] | length' "$SETTINGS_FILE")
@@ -1040,7 +1261,7 @@ main_menu() {
         echo ""
         echo -e "    ${TEXT}${BOLD}Settings${NC}                                                                   ${TEXT_MUTED}esc${NC}"
         echo ""
-        echo -e "    ${TEXT_MUTED}Level $level ($level_name) · $enabled_count tools enabled${NC}"
+        echo -e "    ${TEXT_MUTED}$main_tool_name · Level $level ($level_name) · $enabled_count tools enabled${NC}"
         echo ""
         echo -e "    ${ACCENT}${BOLD}Options${NC}"
     }
@@ -1094,6 +1315,12 @@ main_menu() {
             "")  # Enter - select current item
                 local selected_id="${menu_ids[$current]}"
                 case "$selected_id" in
+                    main_tool)
+                        configure_main_coding_tool
+                        draw_header
+                        draw_all_items
+                        draw_description
+                        ;;
                     delegation)
                         delegation_slider
                         draw_header

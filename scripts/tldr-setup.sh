@@ -136,34 +136,98 @@ echo -e "  ${GREEN}✓${NC} Detected: ${CYAN}$LANG_NAME${NC}"
 
 echo -e "${BLUE}[3/6]${NC} Setting up ignore patterns..."
 
-# Create .tldrignore if needed
+# Create .tldrignore if needed (or update if minimal)
 TLDRIGNORE="$PROJECT_PATH/.tldrignore"
-if [ ! -f "$TLDRIGNORE" ]; then
-    cat > "$TLDRIGNORE" << 'EOF'
+TLDRIGNORE_CONTENT='# Dependencies
 node_modules
+.pnpm
+bower_components
+jspm_packages
+vendor
+
+# Build outputs
 dist
 build
+out
 .next
 .nuxt
 .output
+.svelte-kit
+.vercel
+.netlify
+coverage
+.nyc_output
+
+# Caches
 .git
+.tldr
+.cache
+.parcel-cache
+.turbo
 __pycache__
 *.pyc
 .pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Virtual environments
 venv
 .venv
-target
-vendor
+env
+.env
+
+# Compiled/minified files
 *.min.js
+*.min.css
 *.bundle.js
+*.chunk.js
+*.map
+
+# Lock files (large, not useful for analysis)
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
-.tldr
-EOF
-    echo -e "  ${GREEN}✓${NC} Created .tldrignore"
+Cargo.lock
+poetry.lock
+composer.lock
+
+# Generated files
+*.d.ts
+*.generated.*
+_generated
+convex/_generated
+
+# Large binary/data files
+*.wasm
+*.node
+*.dylib
+*.so
+*.dll
+
+# Rust/Go build
+target
+pkg
+
+# IDE
+.idea
+.vscode
+
+# Logs
+*.log
+logs'
+
+if [ ! -f "$TLDRIGNORE" ]; then
+    echo "$TLDRIGNORE_CONTENT" > "$TLDRIGNORE"
+    echo -e "  ${GREEN}✓${NC} Created .tldrignore with comprehensive patterns"
 else
-    echo -e "  ${GREEN}✓${NC} .tldrignore exists"
+    # Check if existing file is minimal (less than 10 lines)
+    line_count=$(wc -l < "$TLDRIGNORE" | tr -d ' ')
+    if [ "$line_count" -lt 10 ]; then
+        echo "$TLDRIGNORE_CONTENT" > "$TLDRIGNORE"
+        echo -e "  ${GREEN}✓${NC} Updated .tldrignore with comprehensive patterns"
+    else
+        echo -e "  ${GREEN}✓${NC} .tldrignore exists ($line_count patterns)"
+    fi
 fi
 
 # Clean any corrupted indexes
